@@ -4,8 +4,11 @@ import { getAddress } from "viem";
 
 import copyXAbi from "../artifacts/contracts/Core.sol/Core.json";
 
+// Constants
+const ZERO_ETH_ADDR = "0x0000000000000000000000000000000000000000";
+const USD = (n: number) => BigInt(n) * 10n ** 18n;
+
 describe("CopyXCore — Full Test Suite (Viem + Hardhat)", () => {
-  let testClient: any;
   let publicClient: any;
 
   let ownerClient: any;
@@ -20,15 +23,14 @@ describe("CopyXCore — Full Test Suite (Viem + Hardhat)", () => {
 
   let collateral: any;
   let oracle: any;
+  let mockFeed: any;
   let copy: any;
 
-  const USD = (n: number) => BigInt(n) * 10n ** 18n;
-
   beforeEach(async () => {
-    testClient = await hre.viem.getTestClient();
     publicClient = await hre.viem.getPublicClient();
 
     const wallets = await hre.viem.getWalletClients();
+
     ownerClient = wallets[0];
     leaderClient = wallets[1];
     f1Client = wallets[2];
@@ -39,15 +41,15 @@ describe("CopyXCore — Full Test Suite (Viem + Hardhat)", () => {
     follower1 = f1Client.account.address;
     follower2 = f2Client.account.address;
 
-    // Deploy MockERC20
     const ERC20 = await hre.viem.deployContract("MockERC20", [
       "MockUSDC",
       "mUSDC",
       18,
     ]);
+
     collateral = ERC20;
 
-    // Mint tokens
+    // Mint balances
     await ownerClient.writeContract({
       address: collateral.address,
       abi: collateral.abi,
@@ -62,16 +64,28 @@ describe("CopyXCore — Full Test Suite (Viem + Hardhat)", () => {
       args: [follower2, USD(1000)],
     });
 
-    // MockOracle
-    oracle = await hre.viem.deployContract("MockOracle", [USD(3000)]);
+    const MockFeed = await hre.viem.deployContract("MockChainlinkFeed", [
+      3000n * 10n ** 8n, // Chainlink price with 8 decimals
+    ]);
 
-    // CopyXCore
+    mockFeed = MockFeed;
+
+    oracle = await hre.viem.deployContract("ChainlinkOracle", []);
+
+    await ownerClient.writeContract({
+      address: oracle.address,
+      abi: oracle.abi,
+      functionName: "setFeed",
+      args: [ZERO_ETH_ADDR, mockFeed.address],
+    });
+
     copy = await hre.viem.deployContract("Core", [
       collateral.address,
       oracle.address,
     ]);
   });
 
+ 
   it("registers a leader with metadata", async () => {
     await leaderClient.writeContract({
       address: copy.address,
@@ -87,15 +101,12 @@ describe("CopyXCore — Full Test Suite (Viem + Hardhat)", () => {
       args: [0],
     });
 
-    expect(leaderStored[0]).to.equal(
-      getAddress(leader)
-    );
+    expect(getAddress(leaderStored[0])).to.equal(getAddress(leader));
     expect(leaderStored[2]).to.equal(true);
     expect(leaderStored[3]).to.equal("Scalping strat");
   });
 
   it("allows followers to subscribe & updates deposits properly", async () => {
-    // Register leader
     await leaderClient.writeContract({
       address: copy.address,
       abi: copyXAbi.abi,
@@ -103,7 +114,6 @@ describe("CopyXCore — Full Test Suite (Viem + Hardhat)", () => {
       args: ["Meta", 0],
     });
 
-    // follower1 approve
     await f1Client.writeContract({
       address: collateral.address,
       abi: collateral.abi,
@@ -111,7 +121,6 @@ describe("CopyXCore — Full Test Suite (Viem + Hardhat)", () => {
       args: [copy.address, USD(200)],
     });
 
-    // subscribe
     await f1Client.writeContract({
       address: copy.address,
       abi: copyXAbi.abi,
@@ -130,7 +139,6 @@ describe("CopyXCore — Full Test Suite (Viem + Hardhat)", () => {
   });
 
   it("mirrors leader openLong to followers proportionally", async () => {
-    // register leader
     await leaderClient.writeContract({
       address: copy.address,
       abi: copyXAbi.abi,
@@ -138,7 +146,7 @@ describe("CopyXCore — Full Test Suite (Viem + Hardhat)", () => {
       args: ["Meta", 0],
     });
 
-    // approve + subscribe follower1 = 100
+    // follower1 puts 100
     await f1Client.writeContract({
       address: collateral.address,
       abi: collateral.abi,
@@ -153,7 +161,7 @@ describe("CopyXCore — Full Test Suite (Viem + Hardhat)", () => {
       args: [0, USD(100)],
     });
 
-    // approve + subscribe follower2 = 200
+    // follower2 puts 200
     await f2Client.writeContract({
       address: collateral.address,
       abi: collateral.abi,
@@ -168,16 +176,13 @@ describe("CopyXCore — Full Test Suite (Viem + Hardhat)", () => {
       args: [0, USD(200)],
     });
 
-    // Leader opens 900 USD long position
+    // leader opens 900 long
     await leaderClient.writeContract({
       address: copy.address,
       abi: copyXAbi.abi,
       functionName: "leaderOpenLong",
-      args: [0, USD(900), "0x0000000000000000000000000000000000000000"],
+      args: [0, USD(900), ZERO_ETH_ADDR],
     });
-
-    // follower1 = 100/300 => 33% => 300 USD
-    // follower2 = 200/300 => 66% => 600 USD
 
     const fp1 = await publicClient.readContract({
       address: copy.address,
@@ -193,8 +198,8 @@ describe("CopyXCore — Full Test Suite (Viem + Hardhat)", () => {
       args: [0, follower2],
     });
 
-    expect(fp1.sizeUsd).to.equal(USD(300));
-    expect(fp2.sizeUsd).to.equal(USD(600));
+    expect(fp1.sizeUsd).to.equal(USD(300)); // 100/300 * 900
+    expect(fp2.sizeUsd).to.equal(USD(600)); // 200/300 * 900
     expect(fp1.isOpen).to.equal(true);
   });
 
@@ -206,7 +211,7 @@ describe("CopyXCore — Full Test Suite (Viem + Hardhat)", () => {
       args: ["Meta", 0],
     });
 
-    // approve + subscribe
+    // subscribe follower
     await f1Client.writeContract({
       address: collateral.address,
       abi: collateral.abi,
@@ -226,7 +231,7 @@ describe("CopyXCore — Full Test Suite (Viem + Hardhat)", () => {
       address: copy.address,
       abi: copyXAbi.abi,
       functionName: "leaderOpenLong",
-      args: [0, USD(300), "0x0000000000000000000000000000000000000000"],
+      args: [0, USD(300), ZERO_ETH_ADDR],
     });
 
     // leader closes
@@ -263,7 +268,6 @@ describe("CopyXCore — Full Test Suite (Viem + Hardhat)", () => {
       args: [copy.address, USD(50)],
     });
 
-    // subscribe
     await f1Client.writeContract({
       address: copy.address,
       abi: copyXAbi.abi,

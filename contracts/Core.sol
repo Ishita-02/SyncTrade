@@ -22,7 +22,7 @@ import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
 import "./interfaces/IGMXRouter.sol";
-import "./interfaces/IPriceOracle.sol";
+import "./ChainlinkOracle.sol";
 
 contract Core is Ownable, ReentrancyGuard {
     
@@ -58,7 +58,7 @@ contract Core is Ownable, ReentrancyGuard {
 
     IERC20 public collateralToken; // stable token used for deposits (e.g., test USDC)
     IGMXRouter public gmxRouter;    // GMX router (set by owner)
-    IPriceOracle public priceOracle; // price oracle (set by owner)
+    ChainlinkOracle public priceOracle;
 
     uint256 public nextLeaderId;
 
@@ -102,7 +102,7 @@ contract Core is Ownable, ReentrancyGuard {
     ) Ownable(msg.sender) {
         require(_collateralToken != address(0), "collateral required");
         collateralToken = IERC20(_collateralToken);
-        priceOracle = IPriceOracle(_priceOracle);
+        priceOracle = ChainlinkOracle(_priceOracle);
     }
 
     /// Admin can set GMX router address (for testnet integration)
@@ -112,7 +112,7 @@ contract Core is Ownable, ReentrancyGuard {
 
     /// Admin can set Price Oracle
     function setPriceOracle(address _oracle) external onlyOwner {
-        priceOracle = IPriceOracle(_oracle);
+        priceOracle = ChainlinkOracle(_oracle);
     }
 
     /// Admin can change collateral token (if you want)
