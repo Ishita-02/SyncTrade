@@ -1,0 +1,83 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model Leader {
+  id             Int         @id @default(autoincrement())
+  leaderId       Int         @unique
+  address        String
+  meta           String?
+  feeBps         Int         @default(0)
+  totalFollowers Int         @default(0)
+  totalDeposits  Decimal     @default(0)
+  feesAccrued    Decimal     @default(0)
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
+
+  followers      Follower[]
+  positions      Position[]
+  events         EventLog[]
+}
+
+model Follower {
+  id           Int         @id @default(autoincrement())
+  leaderId     Int
+  address      String
+  deposit      Decimal     @default(0)
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+
+  // RELATION: Many followers → one leader
+  leader       Leader      @relation(fields: [leaderId], references: [leaderId])
+
+  // RELATION: One follower → many positions
+  positions    Position[]  @relation("FollowerPositions")
+
+  // RELATION: One follower → many events
+  events       EventLog[]  @relation("FollowerEvents")
+
+  @@unique([leaderId, address])
+}
+
+model Position {
+  id           Int        @id @default(autoincrement())
+  leaderId     Int
+  followerId   Int?       // <+++ Proper relation to Follower
+  action       String
+  isLong       Boolean
+  entryPrice   Decimal
+  exitPrice    Decimal?
+  sizeUsd      Decimal
+  pnlUsd       Decimal?
+  isOpen       Boolean
+  indexToken   String?
+  txHash       String?
+  timestamp    DateTime   @default(now())
+
+  // RELATION: Many positions → one leader
+  leader       Leader     @relation(fields: [leaderId], references: [leaderId])
+
+  // RELATION: Many positions → one follower
+  follower     Follower?  @relation("FollowerPositions", fields: [followerId], references: [id])
+}
+
+model EventLog {
+  id          Int        @id @default(autoincrement())
+  leaderId    Int?
+  followerId  Int?       // <+++ Proper relation to follower
+  event       String
+  args        Json
+  txHash      String?
+  blockNumber Int?
+  createdAt   DateTime   @default(now())
+
+  // RELATION: Many events → one leader
+  leader      Leader?    @relation(fields: [leaderId], references: [leaderId])
+
+  // RELATION: Many events → one follower
+  follower    Follower?  @relation("FollowerEvents", fields: [followerId], references: [id])
+}

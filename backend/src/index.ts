@@ -1,5 +1,5 @@
 import { startServer } from "./server.js";
-import { startIndexer } from "./indexer/core-indexer.js";
+import { startIndexer } from "./services/indexer.service.js";
 
 (async () => {
   try {
