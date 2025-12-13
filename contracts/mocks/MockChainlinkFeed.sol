@@ -8,17 +8,21 @@ contract MockChainlinkFeed {
         price = _price;
     }
 
+    function setPrice(int256 _price) external {
+        price = _price;
+    }
+
     function latestRoundData()
         external
         view
         returns (
-            uint80, int256, uint256, uint256, uint80
+            uint80 roundId,
+            int256 answer,
+            uint256 startedAt,
+            uint256 updatedAt,
+            uint80 answeredInRound
         )
     {
         return (0, price, 0, 0, 0);
-    }
-
-    function setPrice(int256 _price) external {
-        price = _price;
     }
 }

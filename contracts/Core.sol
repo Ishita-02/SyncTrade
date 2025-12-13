@@ -2,21 +2,16 @@
 pragma solidity ^0.8.20;
 
 /**
- * CopyXCore.sol
- * MVP copy-trading contract (ERC20 collateral)
+ * Core.sol
+ * CopyX core contract with on-chain PnL settlement & leader fees (MVP)
  *
- * Notes:
- * - Collateral is an ERC20 token (set at deployment or via admin).
- * - All USD-like values (sizeUsd) are expected scaled by 1e18 (1 USD = 1e18 units).
- * - Price oracle returns price scaled by 1e18 for indexToken or collateral as appropriate.
- * - GMX router integration points are present and commented (TODO) — plug real ABIs/addresses when available.
- *
- * Security / gas:
- * - This MVP loops through followers on-chain when mirroring trades (OK for small follower counts).
- * - ReentrancyGuard is used for external state-changing entrypoints.
+ * - Collateral is an ERC-20 USD-pegged token (18 decimals).
+ * - priceOracle is ChainlinkOracle that returns prices scaled by 1e18.
+ * - sizeUsd and entryPrice and priceOracle values are 1e18 scaled.
  */
 
 import "@openzeppelin/contracts/access/Ownable.sol";
+import "@openzeppelin/contracts/utils/Context.sol";
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
@@ -25,39 +20,36 @@ import "./interfaces/IGMXRouter.sol";
 import "./ChainlinkOracle.sol";
 
 contract Core is Ownable, ReentrancyGuard {
-    
     using SafeERC20 for IERC20;
 
     // --------- STRUCTS ---------
-
     struct Leader {
         address leaderAddress;
         uint256 totalFollowers;
         bool active;
-        string meta;         // optional short description
-        uint16 feeBps;       // performance fee (basis points), reserved for future use
+        string meta;
+        uint16 feeBps; // basis points, e.g., 200 = 2%
     }
 
     struct LeaderPosition {
         bool isLong;
-        uint256 entryPrice; // scaled by 1e18
-        uint256 sizeUsd;    // scaled by 1e18 (leader notional)
+        uint256 entryPrice; // 1e18
+        uint256 sizeUsd;    // 1e18
         bool isOpen;
-        address indexToken; // market token the leader traded (e.g., ETH token address)
+        address indexToken;
     }
 
     struct FollowerPosition {
         bool isLong;
-        uint256 entryPrice; // scaled by 1e18
-        uint256 sizeUsd;    // scaled by 1e18 (follower notional)
+        uint256 entryPrice; // 1e18
+        uint256 sizeUsd;    // 1e18
         bool isOpen;
         address indexToken;
     }
 
     // --------- STORAGE ---------
-
-    IERC20 public collateralToken; // stable token used for deposits (e.g., test USDC)
-    IGMXRouter public gmxRouter;    // GMX router (set by owner)
+    IERC20 public collateralToken;
+    IGMXRouter public gmxRouter;
     ChainlinkOracle public priceOracle;
 
     uint256 public nextLeaderId;
@@ -66,17 +58,17 @@ contract Core is Ownable, ReentrancyGuard {
     mapping(uint256 => LeaderPosition) public leaderPositions;
     mapping(uint256 => mapping(address => FollowerPosition)) public followerPositions;
 
-    // deposits in collateral token: leaderId => follower => amount
+    // deposits (collateral token units, 18 decimals): leaderId => follower => amount
     mapping(uint256 => mapping(address => uint256)) public deposits;
 
-    // follower list per leader
-    mapping(uint256 => address[]) public followersList;
+    // leaderId => accumulated fees (collateral units)
+    mapping(uint256 => uint256) public leaderFees;
 
-    // total deposits per leader
+    // followers list and totals
+    mapping(uint256 => address[]) public followersList;
     mapping(uint256 => uint256) public totalDeposits;
 
     // --------- EVENTS ---------
-
     event LeaderRegistered(uint256 indexed leaderId, address indexed leader, string meta);
     event Subscribed(uint256 indexed leaderId, address indexed follower, uint256 amount);
     event Unsubscribed(uint256 indexed leaderId, address indexed follower, uint256 amount);
@@ -85,54 +77,45 @@ contract Core is Ownable, ReentrancyGuard {
     event FollowerMirrored(uint256 indexed leaderId, address indexed follower, string action, uint256 sizeUsd, bool isLong, uint256 entryPrice, address indexToken);
 
     event PositionClosed(uint256 indexed leaderId, address indexed follower);
+    event FollowerPnLSettled(uint256 indexed leaderId, address indexed follower, int256 pnlUsd); // signed pnl in 1e18 units
+    event LeaderFeesAccrued(uint256 indexed leaderId, uint256 amount);
     event LeaderWithdraw(uint256 indexed leaderId, address indexed to, uint256 amount);
 
     // --------- MODIFIERS ---------
-
     modifier onlyLeader(uint256 leaderId) {
         require(leaders[leaderId].leaderAddress == msg.sender, "Not leader");
         _;
     }
 
     // --------- CONSTRUCTOR / ADMIN ---------
-
-    constructor (
-        address _collateralToken,
-        address _priceOracle
-    ) Ownable(msg.sender) {
+    constructor(address _collateralToken, address _priceOracle) Ownable(msg.sender) {
         require(_collateralToken != address(0), "collateral required");
         collateralToken = IERC20(_collateralToken);
         priceOracle = ChainlinkOracle(_priceOracle);
     }
 
-    /// Admin can set GMX router address (for testnet integration)
     function setGmxRouter(address _gmxRouter) external onlyOwner {
         gmxRouter = IGMXRouter(_gmxRouter);
     }
 
-    /// Admin can set Price Oracle
     function setPriceOracle(address _oracle) external onlyOwner {
         priceOracle = ChainlinkOracle(_oracle);
     }
 
-    /// Admin can change collateral token (if you want)
     function setCollateralToken(address _token) external onlyOwner {
         collateralToken = IERC20(_token);
     }
 
     // --------- LEADER FLOW ---------
-
-    /// Register as a leader. Optionally include a short metadata string.
     function registerLeader(string calldata meta, uint16 feeBps) external returns (uint256) {
         uint256 leaderId = nextLeaderId++;
         leaders[leaderId] = Leader({ leaderAddress: msg.sender, totalFollowers: 0, active: true, meta: meta, feeBps: feeBps });
-
         emit LeaderRegistered(leaderId, msg.sender, meta);
         return leaderId;
     }
 
-    /// Leader opens a long position. `sizeUsd` scaled by 1e18. `indexToken` is the traded asset (e.g., ETH token address)
     function leaderOpenLong(uint256 leaderId, uint256 sizeUsd, address indexToken) external onlyLeader(leaderId) nonReentrant {
+        require(!leaderPositions[leaderId].isOpen, "position already open");
         uint256 price = _getPrice(indexToken);
 
         leaderPositions[leaderId] = LeaderPosition({
@@ -144,12 +127,11 @@ contract Core is Ownable, ReentrancyGuard {
         });
 
         emit LeaderSignal(leaderId, "OPEN_LONG", sizeUsd, true, indexToken);
-
         _mirrorTrade(leaderId, "OPEN_LONG", sizeUsd, true, indexToken);
     }
 
-    /// Leader opens a short
     function leaderOpenShort(uint256 leaderId, uint256 sizeUsd, address indexToken) external onlyLeader(leaderId) nonReentrant {
+        require(!leaderPositions[leaderId].isOpen, "position already open");
         uint256 price = _getPrice(indexToken);
 
         leaderPositions[leaderId] = LeaderPosition({
@@ -161,33 +143,27 @@ contract Core is Ownable, ReentrancyGuard {
         });
 
         emit LeaderSignal(leaderId, "OPEN_SHORT", sizeUsd, false, indexToken);
-
         _mirrorTrade(leaderId, "OPEN_SHORT", sizeUsd, false, indexToken);
     }
 
-    /// Leader closes their position — mirrors close for followers
+    /// Close leader position and settle PnL for followers
     function leaderClose(uint256 leaderId) external onlyLeader(leaderId) nonReentrant {
         LeaderPosition storage lp = leaderPositions[leaderId];
         require(lp.isOpen, "leader no open pos");
 
         lp.isOpen = false;
-
         emit LeaderSignal(leaderId, "CLOSE", 0, false, lp.indexToken);
 
-        _mirrorClose(leaderId);
+        _settleAndClose(leaderId);
     }
 
-    // --------- FOLLOWER FLOW (ERC20 deposits) ---------
-
-    /// Subscribe by depositing collateral token. Approve before calling.
+    // --------- FOLLOWER FLOW ---------
     function subscribe(uint256 leaderId, uint256 amount) external nonReentrant {
         require(leaders[leaderId].active, "leader not active");
         require(amount > 0, "amount > 0");
 
-        // transferFrom follower to contract
         collateralToken.safeTransferFrom(msg.sender, address(this), amount);
 
-        // add to mapping & list if first time
         if (deposits[leaderId][msg.sender] == 0) {
             followersList[leaderId].push(msg.sender);
             leaders[leaderId].totalFollowers += 1;
@@ -199,7 +175,6 @@ contract Core is Ownable, ReentrancyGuard {
         emit Subscribed(leaderId, msg.sender, amount);
     }
 
-    /// Unsubscribe and withdraw entire deposit for that leader (MVP)
     function unsubscribe(uint256 leaderId) external nonReentrant {
         uint256 dep = deposits[leaderId][msg.sender];
         require(dep > 0, "not subscribed");
@@ -215,34 +190,11 @@ contract Core is Ownable, ReentrancyGuard {
         emit Unsubscribed(leaderId, msg.sender, dep);
     }
 
-    /// Leader (or owner) can withdraw any protocol-held tokens accidentally sent (admin safety)
-    function adminWithdrawERC20(address token, address to, uint256 amount) external onlyOwner {
-        IERC20(token).safeTransfer(to, amount);
-    }
-
-    // --------- MIRRORING LOGIC (COMPLETE) ---------
-
-    /**
-     * Mirror leader trade to followers proportionally.
-     * - sizeUsd: leader notional (scaled 1e18)
-     * - followerSizeUsd = sizeUsd * deposits[follower] / totalDeposits[leaderId]
-     *
-     * The contract sets followerPositions[leaderId][follower] and emits FollowerMirrored.
-     * Optionally (TODO) we can call GMX router here to open onchain positions.
-     */
-    function _mirrorTrade(
-        uint256 leaderId,
-        string memory action,
-        uint256 sizeUsd,
-        bool isLong,
-        address indexToken
-    ) internal {
+    // --------- MIRRORING ---------
+    function _mirrorTrade(uint256 leaderId, string memory action, uint256 sizeUsd, bool isLong, address indexToken) internal {
         address[] storage fl = followersList[leaderId];
         uint256 len = fl.length;
-        if (len == 0) {
-            return;
-        }
-
+        if (len == 0) return;
         uint256 totDep = totalDeposits[leaderId];
         if (totDep == 0) return;
 
@@ -263,75 +215,90 @@ contract Core is Ownable, ReentrancyGuard {
                 indexToken: indexToken
             });
 
-            // Optionally open position on GMX for follower:
-            // _maybeCallGMXForFollower(follower, followerSizeUsd, isLong, indexToken);
-
             emit FollowerMirrored(leaderId, follower, action, followerSizeUsd, isLong, price, indexToken);
         }
-
-        // Optionally open position on GMX for leader as well:
-        // _maybeCallGMXForLeader(leaderId, sizeUsd, isLong, indexToken);
     }
 
-    /**
-     * Mirror close: close all open follower positions for leader
-     */
-    function _mirrorClose(uint256 leaderId) internal {
+    // --------- SETTLEMENT (PnL + fees) ---------
+    function _settleAndClose(uint256 leaderId) internal {
+        LeaderPosition storage lp = leaderPositions[leaderId];
         address[] storage fl = followersList[leaderId];
         uint256 len = fl.length;
         if (len == 0) return;
 
+        uint256 exitPrice = _getPrice(lp.indexToken);
+        uint16 feeBps = leaders[leaderId].feeBps;
+
         for (uint256 i = 0; i < len; i++) {
             address follower = fl[i];
-
             FollowerPosition storage fp = followerPositions[leaderId][follower];
-            if (fp.isOpen) {
-                fp.isOpen = false;
-                emit PositionClosed(leaderId, follower);
+            if (!fp.isOpen) continue;
 
-                // Optionally close GMX positions here:
-                // _maybeCallGMXForFollowerClose(follower, fp.sizeUsd, fp.isLong, fp.indexToken);
+            uint256 sizeUsd = fp.sizeUsd;
+            uint256 entry = fp.entryPrice;
+            uint256 exitP = exitPrice;
+
+            int256 pnlSigned = 0;
+
+            // Long case
+            if (fp.isLong) {
+                if (exitP >= entry) {
+                    uint256 profitUsd = (sizeUsd * (exitP - entry)) / entry;
+                    // leader fee
+                    uint256 fee = (profitUsd * feeBps) / 10000;
+                    if (fee > 0) {
+                        leaderFees[leaderId] += fee;
+                        emit LeaderFeesAccrued(leaderId, fee);
+                    }
+                    uint256 netProfit = profitUsd - fee;
+                    deposits[leaderId][follower] += netProfit;
+                    pnlSigned = int256(int256(uint256(netProfit)));
+                } else {
+                    uint256 lossUsd = (sizeUsd * (entry - exitP)) / entry;
+                    uint256 dep = deposits[leaderId][follower];
+                    if (lossUsd >= dep) {
+                        deposits[leaderId][follower] = 0;
+                        pnlSigned = -int256(int256(uint256(dep)));
+                    } else {
+                        deposits[leaderId][follower] = dep - lossUsd;
+                        pnlSigned = -int256(int256(uint256(lossUsd)));
+                    }
+                }
+            } else {
+                // Short case
+                if (entry >= exitP) {
+                    uint256 profitUsd = (sizeUsd * (entry - exitP)) / entry;
+                    uint256 fee = (profitUsd * feeBps) / 10000;
+                    if (fee > 0) {
+                        leaderFees[leaderId] += fee;
+                        emit LeaderFeesAccrued(leaderId, fee);
+                    }
+                    uint256 netProfit = profitUsd - fee;
+                    deposits[leaderId][follower] += netProfit;
+                    pnlSigned = int256(int256(uint256(netProfit)));
+                } else {
+                    uint256 lossUsd = (sizeUsd * (exitP - entry)) / entry;
+                    uint256 dep = deposits[leaderId][follower];
+                    if (lossUsd >= dep) {
+                        deposits[leaderId][follower] = 0;
+                        pnlSigned = -int256(int256(uint256(dep)));
+                    } else {
+                        deposits[leaderId][follower] = dep - lossUsd;
+                        pnlSigned = -int256(int256(uint256(lossUsd)));
+                    }
+                }
             }
+
+            // mark follower closed and emit events
+            fp.isOpen = false;
+            emit FollowerPnLSettled(leaderId, follower, pnlSigned);
+            emit PositionClosed(leaderId, follower);
         }
     }
 
-    // --------- OPTIONAL: GMX BRIDGE STUBS (replace with real calls) ---------
-
-    /**
-     * These functions are placeholders showing where you'd call the GMX router
-     * to open/close per-follower or leader positions on-chain.
-     *
-     * WARNING: real GMX calls require correct parameters, approvals, and gas budgeting.
-     */
-
-    function _maybeCallGMXForFollower(
-        address follower,
-        uint256 followerSizeUsd,
-        bool isLong,
-        address indexToken
-    ) internal {
-        // Example (pseudocode):
-        // if (address(gmxRouter) != address(0)) {
-        //     // convert followerSizeUsd (USD) to sizeDelta param expected by GMX
-        //     // call gmxRouter.increasePosition(contractAccountOrFollower, collateralToken, indexToken, sizeDelta, isLong);
-        // }
-    }
-
-    function _maybeCallGMXForLeader(
-        uint256 leaderId,
-        uint256 sizeUsd,
-        bool isLong,
-        address indexToken
-    ) internal {
-        // similar to above
-    }
-
-    // --------- HELPERS / VIEWS ---------
-
+    // --------- HELPER / VIEWS ---------
     function _getPrice(address indexToken) internal view returns (uint256) {
-        if (address(priceOracle) == address(0)) {
-            revert("oracle not set");
-        }
+        require(address(priceOracle) != address(0), "oracle not set");
         return priceOracle.getPrice(indexToken);
     }
 
@@ -347,7 +314,6 @@ contract Core is Ownable, ReentrancyGuard {
         return leaderPositions[leaderId];
     }
 
-    // remove follower using swap-and-pop (internal)
     function _removeFollower(uint256 leaderId, address follower) internal {
         address[] storage fl = followersList[leaderId];
         uint256 len = fl.length;
@@ -361,10 +327,18 @@ contract Core is Ownable, ReentrancyGuard {
     }
 
     // --------- UTIL / ADMIN ---------
+    function adminWithdrawERC20(address token, address to, uint256 amount) external onlyOwner {
+        IERC20(token).safeTransfer(to, amount);
+    }
 
-    /// Leader can withdraw accrued profit if you implement fee logic later (placeholder)
     function leaderWithdraw(uint256 leaderId, address to, uint256 amount) external onlyLeader(leaderId) nonReentrant {
-        // Placeholder for fee/profit withdrawal flow. For MVP, this can remain unused.
+        require(amount > 0, "amount 0");
+        require(leaderFees[leaderId] >= amount, "insufficient fees");
+        require(to != address(0), "invalid to");
+
+        leaderFees[leaderId] -= amount;
+        collateralToken.safeTransfer(to, amount);
+
         emit LeaderWithdraw(leaderId, to, amount);
     }
 }

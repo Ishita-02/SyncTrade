@@ -300,3 +300,287 @@ describe("CopyXCore — Full Test Suite (Viem + Hardhat)", () => {
     expect(Number(after)).to.be.greaterThan(Number(before));
   });
 });
+
+describe("CopyXCore — Revert & Edge Case Tests", () => {
+  let publicClient: any;
+  let ownerClient: any;
+  let leaderClient: any;
+  let f1Client: any;
+  let f2Client: any;
+
+  let owner: `0x${string}`;
+  let leader: `0x${string}`;
+  let follower1: `0x${string}`;
+  let follower2: `0x${string}`;
+
+  let collateral: any;
+  let oracle: any;
+  let mockFeed: any;
+  let copy: any;
+
+  const ZERO = 0n;
+  const USD = (n: number) => BigInt(n) * 1_000_000_000_000_000_000n;
+  const ZERO_ETH_ADDR = "0x0000000000000000000000000000000000000000";
+
+  beforeEach(async () => {
+    publicClient = await hre.viem.getPublicClient();
+
+    const wallets = await hre.viem.getWalletClients();
+    ownerClient = wallets[0];
+    leaderClient = wallets[1];
+    f1Client = wallets[2];
+    f2Client = wallets[3];
+
+    owner = ownerClient.account.address;
+    leader = leaderClient.account.address;
+    follower1 = f1Client.account.address;
+    follower2 = f2Client.account.address;
+
+    // Collateral
+    collateral = await hre.viem.deployContract("MockERC20", [
+      "MockUSDC",
+      "mUSDC",
+      18,
+    ]);
+
+    await ownerClient.writeContract({
+      address: collateral.address,
+      abi: collateral.abi,
+      functionName: "mint",
+      args: [follower1, USD(1000)],
+    });
+
+    // Mock Feed
+    mockFeed = await hre.viem.deployContract("MockChainlinkFeed", [
+      3000n * 10n ** 8n,
+    ]);
+
+    // Oracle
+    oracle = await hre.viem.deployContract("ChainlinkOracle", []);
+
+    await ownerClient.writeContract({
+      address: oracle.address,
+      abi: oracle.abi,
+      functionName: "setFeed",
+      args: [ZERO_ETH_ADDR, mockFeed.address],
+    });
+
+    // CopyXCore
+    copy = await hre.viem.deployContract("Core", [
+      collateral.address,
+      oracle.address,
+    ]);
+  });
+
+  
+  it("reverts if non-leader tries to open a position", async () => {
+    await leaderClient.writeContract({
+      address: copy.address,
+      abi: copyXAbi.abi,
+      functionName: "registerLeader",
+      args: ["Meta", 0],
+    });
+
+    await expect(
+      f1Client.writeContract({
+        address: copy.address,
+        abi: copyXAbi.abi,
+        functionName: "leaderOpenLong",
+        args: [0, USD(100), ZERO_ETH_ADDR],
+      })
+    ).to.be.rejectedWith("Not leader");
+  });
+
+  // -----------------------------------------------------
+  // ❌ REVERT: cannot subscribe with 0 amount
+  // -----------------------------------------------------
+  it("reverts on zero subscription amount", async () => {
+    await leaderClient.writeContract({
+      address: copy.address,
+      abi: copyXAbi.abi,
+      functionName: "registerLeader",
+      args: ["Strat", 0],
+    });
+
+    await expect(
+      f1Client.writeContract({
+        address: copy.address,
+        abi: copyXAbi.abi,
+        functionName: "subscribe",
+        args: [0, 0n],
+      })
+    ).to.be.rejected;
+  });
+
+  // -----------------------------------------------------
+  // ❌ REVERT: unsubscribing without subscribing
+  // -----------------------------------------------------
+  it("reverts when unsubscribing without subscription", async () => {
+    await leaderClient.writeContract({
+      address: copy.address,
+      abi: copyXAbi.abi,
+      functionName: "registerLeader",
+      args: ["Meta", 0],
+    });
+
+    await expect(
+      f1Client.writeContract({
+        address: copy.address,
+        abi: copyXAbi.abi,
+        functionName: "unsubscribe",
+        args: [0],
+      })
+    ).to.be.rejected;
+  });
+
+  // -----------------------------------------------------
+  // ❌ REVERT: leader cannot close if no open position
+  // -----------------------------------------------------
+  it("reverts if leader closes without open position", async () => {
+    await leaderClient.writeContract({
+      address: copy.address,
+      abi: copyXAbi.abi,
+      functionName: "registerLeader",
+      args: ["Meta", 0],
+    });
+
+    await expect(
+      leaderClient.writeContract({
+        address: copy.address,
+        abi: copyXAbi.abi,
+        functionName: "leaderClose",
+        args: [0],
+      })
+    ).to.be.rejectedWith("leader no open pos");
+  });
+
+  // -----------------------------------------------------
+  // ❌ REVERT: opening long twice
+  // -----------------------------------------------------
+  it("reverts when leader tries to open a second open position", async () => {
+    await leaderClient.writeContract({
+      address: copy.address,
+      abi: copyXAbi.abi,
+      functionName: "registerLeader",
+      args: ["Meta", 0],
+    });
+
+    // follower subscribes (required for mirroring)
+    await f1Client.writeContract({
+      address: collateral.address,
+      abi: collateral.abi,
+      functionName: "approve",
+      args: [copy.address, USD(100)],
+    });
+
+    await f1Client.writeContract({
+      address: copy.address,
+      abi: copyXAbi.abi,
+      functionName: "subscribe",
+      args: [0, USD(100)],
+    });
+
+    // First open works
+    await leaderClient.writeContract({
+      address: copy.address,
+      abi: copyXAbi.abi,
+      functionName: "leaderOpenLong",
+      args: [0, USD(100), ZERO_ETH_ADDR],
+    });
+
+    // Second open SHOULD REVERT
+    await expect(
+      leaderClient.writeContract({
+        address: copy.address,
+        abi: copyXAbi.abi,
+        functionName: "leaderOpenLong",
+        args: [0, USD(100), ZERO_ETH_ADDR],
+      })
+    ).to.be.rejected;
+  });
+
+  // -----------------------------------------------------
+  // ❌ REVERT: price feed missing for a token
+  // -----------------------------------------------------
+  it("reverts if no Chainlink feed is set for token", async () => {
+    await leaderClient.writeContract({
+      address: copy.address,
+      abi: copyXAbi.abi,
+      functionName: "registerLeader",
+      args: ["Meta", 0],
+    });
+
+    await f1Client.writeContract({
+      address: collateral.address,
+      abi: collateral.abi,
+      functionName: "approve",
+      args: [copy.address, USD(50)],
+    });
+
+    await f1Client.writeContract({
+      address: copy.address,
+      abi: copyXAbi.abi,
+      functionName: "subscribe",
+      args: [0, USD(50)],
+    });
+
+    // Attempt to use token without a feed → revert
+    await expect(
+      leaderClient.writeContract({
+        address: copy.address,
+        abi: copyXAbi.abi,
+        functionName: "leaderOpenLong",
+        args: [
+          0,
+          USD(100),
+          "0x0000000000000000000000000000000000009999",
+        ],
+      })
+    ).to.be.rejected;
+  });
+
+  // -----------------------------------------------------
+  // ❌ REVERT: follower cannot mirror if no deposit
+  // -----------------------------------------------------
+  it("does not create follower positions for unsubscribed users", async () => {
+    await leaderClient.writeContract({
+      address: copy.address,
+      abi: copyXAbi.abi,
+      functionName: "registerLeader",
+      args: ["Meta", 0],
+    });
+
+    // No subscribers
+    await leaderClient.writeContract({
+      address: copy.address,
+      abi: copyXAbi.abi,
+      functionName: "leaderOpenLong",
+      args: [0, USD(500), ZERO_ETH_ADDR],
+    });
+
+    const fp = await publicClient.readContract({
+      address: copy.address,
+      abi: copyXAbi.abi,
+      functionName: "getFollowerPosition",
+      args: [0, follower1],
+    });
+
+    expect(fp.sizeUsd).to.equal(0n);
+    expect(fp.isOpen).to.equal(false);
+  });
+
+  // -----------------------------------------------------
+  // ❌ REVERT: non-owner cannot set feed
+  // -----------------------------------------------------
+  it("reverts when non-owner tries to set price feed", async () => {
+    await expect(
+      f1Client.writeContract({
+        address: oracle.address,
+        abi: oracle.abi,
+        functionName: "setFeed",
+        args: [ZERO_ETH_ADDR, mockFeed.address],
+      })
+    ).to.be.rejected;
+  });
+});
+

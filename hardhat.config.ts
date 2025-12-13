@@ -3,7 +3,13 @@ import "@nomicfoundation/hardhat-toolbox-viem";
 import "@nomicfoundation/hardhat-viem";
 
 const config: HardhatUserConfig = {
-  solidity: "0.8.24",
+  solidity:  {
+    version: "0.8.24",
+    settings: {
+      optimizer: { enabled: true, runs: 200 },
+      viaIR: true,
+    },
+  },
 };
 
 export default config;
