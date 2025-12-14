@@ -9,7 +9,7 @@ datasource db {
 
 model Leader {
   id             Int         @id @default(autoincrement())
-  leaderId       Int         @unique
+  leaderId       Int?         @unique
   address        String
   meta           String?
   feeBps         Int         @default(0)

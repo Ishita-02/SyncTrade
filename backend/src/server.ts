@@ -2,6 +2,7 @@ import Fastify from "fastify";
 import leaderRoutes from "./routes/leader.route.js";
 import followerRoutes from "./routes/follower.route.js";
 import positionRoutes from "./routes/position.route.js";
+import strategyRoutes from "./routes/strategy.route.js";
 import { config } from "./config.js";
 import cors from "@fastify/cors";
 
@@ -18,6 +19,8 @@ export const startServer = async () => {
   app.register(leaderRoutes, { prefix: "/api" });
   app.register(followerRoutes, { prefix: "/api" });
   app.register(positionRoutes, { prefix: "/api" });
+  app.register(strategyRoutes, { prefix: "/api" });
+
   
 
   const port = config.PORT;
