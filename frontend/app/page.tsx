@@ -19,45 +19,55 @@ export default function Page() {
   });
 
   if (isLoading) {
-    return <div className="p-6">Loading strategies…</div>;
+    return (
+      <div className="max-w-6xl mx-auto px-6 py-16 text-text-muted">
+        Loading strategies…
+      </div>
+    );
   }
 
   if (error) {
-    return <div className="p-6 text-red-500">Failed to load strategies</div>;
+    return (
+      <div className="max-w-6xl mx-auto px-6 py-16 text-red-500">
+        Failed to load strategies
+      </div>
+    );
   }
 
   return (
-    <div className="p-6 space-y-6">
+    <div className="max-w-6xl mx-auto px-6 py-12 space-y-10">
       {/* Header */}
-      <div>
-        <h1 className="text-3xl font-bold">Markets</h1>
-        <p className="text-muted-foreground">
+      <div className="space-y-2">
+        <h1 className="text-4xl font-semibold">Markets</h1>
+        <p className="text-text-muted max-w-xl">
           Copy strategies trading GMX-style perpetual markets
         </p>
       </div>
 
-      {/* Market selector (static for now) */}
-      <div className="flex gap-3">
+      {/* Market selector */}
+      <div className="flex gap-4">
         {["ETH-USD", "BTC-USD", "SOL-USD"].map((m) => (
-          <div
+          <button
             key={m}
-            className="px-4 py-2 border rounded-lg text-sm cursor-pointer hover:bg-muted"
+            className="px-5 py-2 rounded-lg border border-border
+                       bg-bg-muted hover:bg-bg-card
+                       transition text-sm font-medium"
           >
             {m}
-          </div>
+          </button>
         ))}
       </div>
 
       {/* Leader strategies table */}
-      <div className="border rounded-xl overflow-hidden">
+      <div className="bg-bg-card border border-border rounded-xl overflow-hidden">
         <table className="w-full">
-          <thead className="bg-muted">
+          <thead className="bg-bg-muted text-text-muted text-sm">
             <tr>
-              <th className="p-3 text-left">Strategy</th>
-              <th className="p-3 text-left">Leader</th>
-              <th className="p-3 text-center">Followers</th>
-              <th className="p-3 text-center">AUM</th>
-              <th className="p-3 text-center">Action</th>
+              <th className="px-6 py-4 text-left">Strategy</th>
+              <th className="px-6 py-4 text-left">Leader</th>
+              <th className="px-6 py-4 text-center">Followers</th>
+              <th className="px-6 py-4 text-center">AUM</th>
+              <th className="px-6 py-4 text-center">Action</th>
             </tr>
           </thead>
 
@@ -65,30 +75,32 @@ export default function Page() {
             {data?.map((leader) => (
               <tr
                 key={leader.leaderId}
-                className="border-t hover:bg-muted/50"
+                className="border-t border-border hover:bg-bg-muted/50 transition"
               >
-                <td className="p-3 font-medium">
+                <td className="px-6 py-4 font-medium">
                   {leader.meta || "Unnamed Strategy"}
                 </td>
 
-                <td className="p-3 text-xs break-all">
+                <td className="px-6 py-4 text-xs text-text-muted break-all">
                   {leader.address}
                 </td>
 
-                <td className="p-3 text-center">
+                <td className="px-6 py-4 text-center">
                   {leader.totalFollowers}
                 </td>
 
-                <td className="p-3 text-center">
+                <td className="px-6 py-4 text-center">
                   {leader.totalDeposits
                     ? `$${Number(leader.totalDeposits) / 1e18}`
                     : "-"}
                 </td>
 
-                <td className="p-3 text-center">
+                <td className="px-6 py-4 text-center">
                   <Link
                     href={`/leader/${leader.leaderId}`}
-                    className="px-3 py-1 rounded bg-blue-600 text-white text-sm"
+                    className="inline-block px-4 py-1.5 rounded-md
+                               bg-accent text-white text-sm
+                               hover:opacity-90 transition"
                   >
                     View
                   </Link>
@@ -98,8 +110,10 @@ export default function Page() {
 
             {data?.length === 0 && (
               <tr>
-                <td colSpan={5} className="p-6 text-center text-muted-foreground">
-                  No strategies yet
+                <td colSpan={5}>
+                  <div className="h-48 flex items-center justify-center text-text-muted">
+                    No strategies yet
+                  </div>
                 </td>
               </tr>
             )}
