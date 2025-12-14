@@ -4,12 +4,11 @@ import { WagmiProvider, createConfig, http } from "wagmi";
 import { hardhat } from "wagmi/chains";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { RainbowKitProvider, getDefaultWallets } from "@rainbow-me/rainbowkit";
-
-// import "@rainbow-me/rainbowkit/dist/index.css";
+import "@rainbow-me/rainbowkit/styles.css";
 
 const { wallets } = getDefaultWallets({
   appName: "SyncTrade",
-  projectId: "demo-project-id", // OK for local
+  projectId: "db7458b563bb0786038829c78bd0ba83", // OK for local
 });
 
 const config = createConfig({

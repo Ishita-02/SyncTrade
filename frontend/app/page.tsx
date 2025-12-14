@@ -1,8 +1,11 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
+import { useState } from "react";
 import Link from "next/link";
 import { api } from "../lib/api";
+import { TrendingUp, Users, DollarSign, Plus } from "lucide-react";
+import { ConnectButton } from "@rainbow-me/rainbowkit";
 
 type Leader = {
   leaderId: number;
@@ -10,115 +13,463 @@ type Leader = {
   meta: string;
   totalFollowers: number;
   totalDeposits?: string;
+  feeBps: number;
 };
 
 export default function Page() {
+  const [activeTab, setActiveTab] = useState("ETH-USD");
+
   const { data, isLoading, error } = useQuery({
     queryKey: ["leaders"],
     queryFn: () => api<Leader[]>("/leaders"),
   });
 
+  const leaders = data || [];
+
+  const stats = [
+    {
+      label: "Total AUM",
+      value: leaders
+        .reduce((sum, l) => sum + (Number(l.totalDeposits) || 0), 0)
+        .toFixed(2),
+      icon: DollarSign,
+    },
+    {
+      label: "Active Leaders",
+      value: leaders.length.toString(),
+      icon: TrendingUp,
+    },
+    {
+      label: "Total Followers",
+      value: leaders
+        .reduce((sum, l) => sum + l.totalFollowers, 0)
+        .toString(),
+      icon: Users,
+    },
+  ];
+
+  const markets = ["ETH-USD", "BTC-USD", "SOL-USD"];
+
+  const formatAddress = (address: string) => {
+    return `${address.slice(0, 6)}...${address.slice(-4)}`;
+  };
+
   if (isLoading) {
     return (
-      <div className="max-w-6xl mx-auto px-6 py-16 text-text-muted">
-        Loading strategies…
+      <div
+        style={{
+          backgroundColor: "#0f1419",
+          minHeight: "100vh",
+          color: "#e6edf3",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+        }}
+      >
+        Loading...
       </div>
     );
   }
 
   if (error) {
     return (
-      <div className="max-w-6xl mx-auto px-6 py-16 text-red-500">
+      <div
+        style={{
+          backgroundColor: "#0f1419",
+          minHeight: "100vh",
+          color: "#f85149",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+        }}
+      >
         Failed to load strategies
       </div>
     );
   }
 
   return (
-    <div className="max-w-6xl mx-auto px-6 py-12 space-y-10">
-      {/* Header */}
-      <div className="space-y-2">
-        <h1 className="text-4xl font-semibold">Markets</h1>
-        <p className="text-text-muted max-w-xl">
-          Copy strategies trading GMX-style perpetual markets
-        </p>
-      </div>
-
-      {/* Market selector */}
-      <div className="flex gap-4">
-        {["ETH-USD", "BTC-USD", "SOL-USD"].map((m) => (
-          <button
-            key={m}
-            className="px-5 py-2 rounded-lg border border-border
-                       bg-bg-muted hover:bg-bg-card
-                       transition text-sm font-medium"
+    <div style={{ backgroundColor: "#0f1419", minHeight: "100vh", color: "#e6edf3" }}>
+      <header style={{ backgroundColor: "#161b22", borderBottom: "1px solid #30363d" }}>
+        <div style={{ maxWidth: "1400px", margin: "0 auto", padding: "0 24px" }}>
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              padding: "16px 0",
+            }}
           >
-            {m}
-          </button>
-        ))}
-      </div>
+            <div style={{ display: "flex", alignItems: "center", gap: "48px" }}>
+              <h1 style={{ fontSize: "20px", fontWeight: "700", color: "#e6edf3", margin: 0 }}>
+                SyncTrade
+              </h1>
+              <nav style={{ display: "flex", gap: "32px" }}>
+                <Link
+                  href="/"
+                  style={{ color: "#58a6ff", textDecoration: "none", fontWeight: "500" }}
+                >
+                  Markets
+                </Link>
+                
+                <Link
+                  href="/portfolio"
+                  style={{
+                    color: "#8b949e",
+                    textDecoration: "none",
+                    transition: "color 0.2s",
+                  }}
+                >
+                  Portfolio
+                </Link>
+                
+                <Link
+                  href="#"
+                  style={{
+                    color: "#8b949e",
+                    textDecoration: "none",
+                    transition: "color 0.2s",
+                  }}
+                >
+                  Docs
+                </Link>
+              </nav>
+            </div>
+            
+            {/* Added ConnectButton to match other pages */}
+            <ConnectButton showBalance={false} chainStatus="icon" accountStatus="address" />
+          </div>
+        </div>
+      </header>
 
-      {/* Leader strategies table */}
-      <div className="bg-bg-card border border-border rounded-xl overflow-hidden">
-        <table className="w-full">
-          <thead className="bg-bg-muted text-text-muted text-sm">
-            <tr>
-              <th className="px-6 py-4 text-left">Strategy</th>
-              <th className="px-6 py-4 text-left">Leader</th>
-              <th className="px-6 py-4 text-center">Followers</th>
-              <th className="px-6 py-4 text-center">AUM</th>
-              <th className="px-6 py-4 text-center">Action</th>
-            </tr>
-          </thead>
-
-          <tbody>
-            {data?.map((leader) => (
-              <tr
-                key={leader.leaderId}
-                className="border-t border-border hover:bg-bg-muted/50 transition"
+      <div style={{ maxWidth: "1400px", margin: "0 auto", padding: "32px 24px" }}>
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(3, 1fr)",
+            gap: "16px",
+            marginBottom: "32px",
+          }}
+        >
+          {stats.map((stat, i) => {
+            const IconComponent = stat.icon;
+            return (
+              <div
+                key={i}
+                style={{
+                  backgroundColor: "#161b22",
+                  border: "1px solid #30363d",
+                  borderRadius: "12px",
+                  padding: "24px",
+                }}
               >
-                <td className="px-6 py-4 font-medium">
-                  {leader.meta || "Unnamed Strategy"}
-                </td>
-
-                <td className="px-6 py-4 text-xs text-text-muted break-all">
-                  {leader.address}
-                </td>
-
-                <td className="px-6 py-4 text-center">
-                  {leader.totalFollowers}
-                </td>
-
-                <td className="px-6 py-4 text-center">
-                  {leader.totalDeposits
-                    ? `$${Number(leader.totalDeposits) / 1e18}`
-                    : "-"}
-                </td>
-
-                <td className="px-6 py-4 text-center">
-                  <Link
-                    href={`/leader/${leader.leaderId}`}
-                    className="inline-block px-4 py-1.5 rounded-md
-                               bg-accent text-white text-sm
-                               hover:opacity-90 transition"
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "12px",
+                    marginBottom: "12px",
+                  }}
+                >
+                  <div
+                    style={{
+                      width: "40px",
+                      height: "40px",
+                      borderRadius: "8px",
+                      backgroundColor: "#21262d",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                    }}
                   >
-                    View
-                  </Link>
-                </td>
-              </tr>
-            ))}
-
-            {data?.length === 0 && (
-              <tr>
-                <td colSpan={5}>
-                  <div className="h-48 flex items-center justify-center text-text-muted">
-                    No strategies yet
+                    <IconComponent style={{ width: "20px", height: "20px", color: "#58a6ff" }} />
                   </div>
-                </td>
+                  <div>
+                    <div style={{ color: "#8b949e", fontSize: "13px", marginBottom: "4px" }}>
+                      {stat.label}
+                    </div>
+                    <div style={{ color: "#e6edf3", fontSize: "24px", fontWeight: "700" }}>
+                      {stat.label.includes("AUM") ? `$${stat.value}` : stat.value}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        <div style={{ marginBottom: "24px" }}>
+          <h2 style={{ color: "#e6edf3", fontSize: "28px", fontWeight: "700", marginBottom: "8px" }}>
+            Trading Strategies
+          </h2>
+          <p style={{ color: "#8b949e", fontSize: "15px", margin: 0 }}>
+            Copy strategies from top traders on GMX perpetuals
+          </p>
+        </div>
+
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: "12px",
+            marginBottom: "24px",
+            flexWrap: "wrap",
+          }}
+        >
+          {markets.map((market) => (
+            <button
+              key={market}
+              onClick={() => setActiveTab(market)}
+              style={{
+                padding: "10px 20px",
+                borderRadius: "8px",
+                border: activeTab === market ? "none" : "1px solid #30363d",
+                backgroundColor: activeTab === market ? "#1f6feb" : "#161b22",
+                color: activeTab === market ? "#ffffff" : "#8b949e",
+                fontWeight: "600",
+                cursor: "pointer",
+                fontSize: "14px",
+                transition: "all 0.2s",
+              }}
+            >
+              {market}
+            </button>
+          ))}
+          <div style={{ flex: 1 }} />
+          <button
+            style={{
+              backgroundColor: "#238636",
+              color: "#ffffff",
+              padding: "10px 20px",
+              borderRadius: "8px",
+              border: "none",
+              fontWeight: "600",
+              cursor: "pointer",
+              fontSize: "14px",
+              display: "flex",
+              alignItems: "center",
+              gap: "8px",
+            }}
+          >
+            <Plus style={{ width: "18px", height: "18px" }} />
+            Create Strategy
+          </button>
+        </div>
+
+        <div
+          style={{
+            backgroundColor: "#161b22",
+            border: "1px solid #30363d",
+            borderRadius: "12px",
+            overflow: "hidden",
+          }}
+        >
+          <table style={{ width: "100%", borderCollapse: "collapse" }}>
+            <thead>
+              <tr style={{ borderBottom: "1px solid #30363d" }}>
+                <th
+                  style={{
+                    textAlign: "left",
+                    padding: "16px 24px",
+                    color: "#8b949e",
+                    fontWeight: "600",
+                    fontSize: "13px",
+                  }}
+                >
+                  Strategy
+                </th>
+                <th
+                  style={{
+                    textAlign: "left",
+                    padding: "16px 24px",
+                    color: "#8b949e",
+                    fontWeight: "600",
+                    fontSize: "13px",
+                  }}
+                >
+                  Leader
+                </th>
+                <th
+                  style={{
+                    textAlign: "left",
+                    padding: "16px 24px",
+                    color: "#8b949e",
+                    fontWeight: "600",
+                    fontSize: "13px",
+                  }}
+                >
+                  Followers
+                </th>
+                <th
+                  style={{
+                    textAlign: "left",
+                    padding: "16px 24px",
+                    color: "#8b949e",
+                    fontWeight: "600",
+                    fontSize: "13px",
+                  }}
+                >
+                  Total Deposits
+                </th>
+                <th
+                  style={{
+                    textAlign: "left",
+                    padding: "16px 24px",
+                    color: "#8b949e",
+                    fontWeight: "600",
+                    fontSize: "13px",
+                  }}
+                >
+                  Fee
+                </th>
+                <th
+                  style={{
+                    textAlign: "right",
+                    padding: "16px 24px",
+                    color: "#8b949e",
+                    fontWeight: "600",
+                    fontSize: "13px",
+                  }}
+                >
+                  Action
+                </th>
               </tr>
-            )}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {leaders.length === 0 ? (
+                <tr>
+                  <td colSpan={6} style={{ padding: "80px 24px", textAlign: "center" }}>
+                    <div
+                      style={{
+                        display: "flex",
+                        flexDirection: "column",
+                        alignItems: "center",
+                        gap: "16px",
+                      }}
+                    >
+                      <div
+                        style={{
+                          width: "64px",
+                          height: "64px",
+                          borderRadius: "50%",
+                          backgroundColor: "#21262d",
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                        }}
+                      >
+                        <TrendingUp style={{ width: "32px", height: "32px", color: "#58a6ff" }} />
+                      </div>
+                      <div>
+                        <div
+                          style={{
+                            color: "#e6edf3",
+                            fontSize: "18px",
+                            fontWeight: "600",
+                            marginBottom: "8px",
+                          }}
+                        >
+                          No strategies yet
+                        </div>
+                        <div style={{ color: "#8b949e", fontSize: "14px" }}>
+                          Be the first to create a strategy for {activeTab}
+                        </div>
+                      </div>
+                      <button
+                        style={{
+                          marginTop: "16px",
+                          backgroundColor: "#238636",
+                          color: "#ffffff",
+                          padding: "10px 24px",
+                          borderRadius: "8px",
+                          border: "none",
+                          fontWeight: "600",
+                          cursor: "pointer",
+                          fontSize: "14px",
+                          display: "flex",
+                          alignItems: "center",
+                          gap: "8px",
+                        }}
+                      >
+                        <Plus style={{ width: "18px", height: "18px" }} />
+                        Create Strategy
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ) : (
+                leaders.map((leader) => (
+                  <tr key={leader.leaderId} style={{ borderBottom: "1px solid #30363d" }}>
+                    <td style={{ padding: "16px 24px", color: "#e6edf3" }}>
+                      {leader.meta || "Unnamed Strategy"}
+                    </td>
+                    <td
+                      style={{
+                        padding: "16px 24px",
+                        color: "#e6edf3",
+                        fontFamily: "monospace",
+                      }}
+                    >
+                      {formatAddress(leader.address)}
+                    </td>
+                    <td style={{ padding: "16px 24px", color: "#e6edf3" }}>
+                      {leader.totalFollowers}
+                    </td>
+                    <td style={{ padding: "16px 24px", color: "#e6edf3" }}>
+                      ${leader.totalDeposits ? (Number(leader.totalDeposits) / 1e18).toFixed(2) : "0.00"}
+                    </td>
+                    <td style={{ padding: "16px 24px", color: "#e6edf3" }}>
+                      {leader.feeBps ? (leader.feeBps / 100).toFixed(2) : "0"}%
+                    </td>
+                    <td style={{ padding: "16px 24px", textAlign: "right" }}>
+                      <Link
+                        href={`/leader/${leader.leaderId}`}
+                        style={{
+                          display: "inline-block",
+                          backgroundColor: "#1f6feb",
+                          color: "#ffffff",
+                          padding: "6px 16px",
+                          borderRadius: "6px",
+                          textDecoration: "none",
+                          fontWeight: "600",
+                          fontSize: "13px",
+                        }}
+                      >
+                        View
+                      </Link>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+
+        <div
+          style={{
+            marginTop: "32px",
+            padding: "24px",
+            backgroundColor: "#161b22",
+            border: "1px solid #30363d",
+            borderRadius: "12px",
+          }}
+        >
+          <h3
+            style={{
+              color: "#e6edf3",
+              fontSize: "16px",
+              fontWeight: "600",
+              marginBottom: "12px",
+            }}
+          >
+            How Copy Trading Works
+          </h3>
+          <p style={{ color: "#8b949e", fontSize: "14px", lineHeight: "1.6", margin: 0 }}>
+            Follow experienced traders and automatically copy their positions on GMX perpetuals.
+            Leaders set their own performance fees, and you maintain full control of your funds at
+            all times.
+          </p>
+        </div>
       </div>
     </div>
   );
