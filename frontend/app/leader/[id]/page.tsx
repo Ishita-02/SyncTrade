@@ -29,9 +29,6 @@ export default function LeaderPage() {
     meta: "ETH Momentum Strategy",
   };
 
-  const isLeader =
-    !mounted || address?.toLowerCase() === leader.address.toLowerCase();
-
   return (
     <div
       style={{
@@ -128,29 +125,100 @@ export default function LeaderPage() {
           </div>
         </div>
 
-        {/* Main Content Grid - Chart Left, Actions Right */}
+        {/* Main Content Grid */}
         <div
           style={{
             display: "grid",
-            gridTemplateColumns: "1fr 400px",
+            gridTemplateColumns: "1fr 400px", // Main Grid Ratio
             gap: "24px",
+            alignItems: "start", // Prevents stretching
             marginBottom: "32px",
           }}
         >
-          {/* Left: Chart */}
-          <div
-            style={{
-              backgroundColor: "#161b22",
-              border: "1px solid #30363d",
-              borderRadius: "12px",
-              padding: "20px",
-            }}
-          >
-            <CandlestickChart />
+          {/* LEFT COLUMN: Chart + Positions Table */}
+          <div style={{ display: "flex", flexDirection: "column", gap: "24px" }}>
+            
+            {/* Chart Section - Fixed height to make it shorter */}
+            <div
+              style={{
+                backgroundColor: "#161b22",
+                border: "1px solid #30363d",
+                borderRadius: "12px",
+                padding: "20px",
+                height: "500px", // RESTRICTED HEIGHT
+                display: "flex",
+                flexDirection: "column",
+              }}
+            >
+              <CandlestickChart />
+            </div>
+
+            {/* Positions Table - Now below chart to fill the gap */}
+            <div
+              style={{
+                backgroundColor: "#161b22",
+                border: "1px solid #30363d",
+                borderRadius: "12px",
+                padding: "24px",
+              }}
+            >
+              <h3
+                style={{
+                  fontSize: "18px",
+                  fontWeight: 600,
+                  marginBottom: "16px",
+                }}
+              >
+                Open Positions
+              </h3>
+
+              <PositionTable
+                positions={[
+                  {
+                    market: "ETH",
+                    side: "Long",
+                    sizeUsd: "300",
+                    entryPrice: "3500",
+                  },
+                  {
+                    market: "ETH",
+                    side: "Short",
+                    sizeUsd: "150",
+                    entryPrice: "3700",
+                  },
+                ]}
+              />
+            </div>
           </div>
 
-          {/* Right: Subscribe & Execute Boxes */}
+          {/* RIGHT COLUMN: Subscribe & Execute Boxes */}
           <div style={{ display: "flex", flexDirection: "column", gap: "24px" }}>
+
+            {/* Execute Trade Box */}
+            <div
+              style={{
+                backgroundColor: "#161b22",
+                border: "1px solid #30363d",
+                borderRadius: "12px",
+                padding: "24px",
+              }}
+            >
+              <h3
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "8px",
+                  fontSize: "18px",
+                  fontWeight: 600,
+                  marginBottom: "16px",
+                }}
+              >
+                <Layers size={18} />
+                Execute Trade
+              </h3>
+              <ExecuteTradeBox leaderId={leaderId} />
+            </div>
+            
             {/* Subscribe Box */}
             <div
               style={{
@@ -176,68 +244,7 @@ export default function LeaderPage() {
               <SubscribeBox leaderId={leaderId} />
             </div>
 
-            {/* Execute Trade Box - Always show for development */}
-            <div
-              style={{
-                backgroundColor: "#161b22",
-                border: "1px solid #30363d",
-                borderRadius: "12px",
-                padding: "24px",
-              }}
-            >
-              <h3
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: "8px",
-                  fontSize: "18px",
-                  fontWeight: 600,
-                  marginBottom: "16px",
-                }}
-              >
-                <Layers size={18} />
-                Execute Trade
-              </h3>
-              <ExecuteTradeBox leaderId={leaderId} />
-            </div>
           </div>
-        </div>
-
-        {/* Positions Table - Full Width Below */}
-        <div
-          style={{
-            backgroundColor: "#161b22",
-            border: "1px solid #30363d",
-            borderRadius: "12px",
-            padding: "24px",
-          }}
-        >
-          <h3
-            style={{
-              fontSize: "18px",
-              fontWeight: 600,
-              marginBottom: "16px",
-            }}
-          >
-            Open Positions
-          </h3>
-
-          <PositionTable
-            positions={[
-              {
-                market: "ETH",
-                side: "Long",
-                sizeUsd: "300",
-                entryPrice: "3500",
-              },
-              {
-                market: "ETH",
-                side: "Short",
-                sizeUsd: "150",
-                entryPrice: "3700",
-              },
-            ]}
-          />
         </div>
       </div>
     </div>

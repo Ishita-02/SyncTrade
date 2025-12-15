@@ -21,8 +21,8 @@ export default function PositionTable({
             <td className={p.isLong ? "badge-long" : "badge-short"}>
               {p.isLong ? "Long" : "Short"}
             </td>
-            <td>${Number(p.sizeUsd) / 1e18}</td>
-            <td>${Number(p.entryPrice) / 1e18}</td>
+            <td>${Number(p.sizeUsd) }</td>
+            <td>${Number(p.entryPrice) }</td>
             <td>-</td>
           </tr>
         ))}

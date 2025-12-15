@@ -382,28 +382,6 @@ export default function CandlestickChart() {
           />
         </ComposedChart>
       </ResponsiveContainer>
-
-      {/* Info bar */}
-      <div
-        style={{
-          marginTop: "16px",
-          padding: "10px 16px",
-          backgroundColor: "#161b22",
-          border: "1px solid #30363d",
-          borderRadius: "6px",
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-        }}
-      >
-        <div style={{ fontSize: "12px", color: "#8b949e" }}>
-          <span style={{ color: "#e6edf3", fontWeight: "600" }}>{visibleData.length}</span> of{" "}
-          {allData.length} candles displayed
-        </div>
-        <div style={{ fontSize: "11px", color: "#8b949e" }}>
-          {visibleData[0]?.date} - {visibleData[visibleData.length - 1]?.date}
-        </div>
-      </div>
     </div>
   );
 }
