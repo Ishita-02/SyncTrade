@@ -4,42 +4,68 @@ import { useState } from "react";
 import { useWriteContract } from "wagmi";
 import { CORE_ABI, CORE_CONTRACT } from "../../lib/contracts";
 
+const INDEX_TOKEN_ETH =
+  "0x0000000000000000000000000000000000000000"; // mock ETH
+
 export default function ExecuteTradeBox({ leaderId }: { leaderId: number }) {
-  const [size, setSize] = useState("");
-  const { writeContract } = useWriteContract();
+  const [sizeUsd, setSizeUsd] = useState("");
+  const { writeContract, isPending } = useWriteContract();
+
+  const sizeUsdWei =
+    sizeUsd && Number(sizeUsd) > 0
+      ? BigInt(Math.floor(Number(sizeUsd))) 
+      : BigInt(Number(0));
 
   return (
-    <div className="border rounded-xl p-4 space-y-3">
-      <h3 className="font-semibold">Leader Actions</h3>
+    <div className="card">
+      <div className="section-title">Leader Actions</div>
 
       <input
+        className="input"
         type="number"
-        placeholder="Size USD"
-        className="w-full border rounded p-2"
-        value={size}
-        onChange={(e) => setSize(e.target.value)}
+        placeholder="Size (USD)"
+        value={sizeUsd}
+        onChange={(e) => setSizeUsd(e.target.value)}
       />
 
-      <button
-        className="w-full bg-green-600 text-white py-2 rounded"
-        onClick={() =>
-          writeContract({
-            address: CORE_CONTRACT,
-            abi: CORE_ABI,
-            functionName: "leaderOpenLong",
-            args: [
-              leaderId,
-              BigInt(Number(size) * 1e18),
-              "0x0000000000000000000000000000000000000000",
-            ],
-          })
-        }
-      >
-        Open Long
-      </button>
+      <div style={{ display: "flex", gap: "12px", marginTop: "12px" }}>
+        <button
+          className="btn btn-green"
+          disabled={!sizeUsdWei || isPending}
+          onClick={() =>
+            writeContract({
+              address: CORE_CONTRACT,
+              abi: CORE_ABI,
+              functionName: "leaderOpenLong",
+              args: [leaderId, sizeUsdWei, INDEX_TOKEN_ETH],
+            })
+          }
+          style={{ flex: 1 }}
+        >
+          Open Long
+        </button>
+
+        <button
+          className="btn btn-danger"
+          disabled={!sizeUsdWei || isPending}
+          onClick={() =>
+            writeContract({
+              address: CORE_CONTRACT,
+              abi: CORE_ABI,
+              functionName: "leaderOpenShort",
+              args: [leaderId, sizeUsdWei, INDEX_TOKEN_ETH],
+            })
+          }
+          style={{ flex: 1 }}
+        >
+          Open Short
+        </button>
+      </div>
 
       <button
-        className="w-full bg-red-600 text-white py-2 rounded"
+        className="btn btn-primary"
+        disabled={isPending}
+        style={{ marginTop: "12px", width: "100%" }}
         onClick={() =>
           writeContract({
             address: CORE_CONTRACT,

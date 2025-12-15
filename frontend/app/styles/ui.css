@@ -1,0 +1,87 @@
+/* Card */
+.card {
+  background: linear-gradient(180deg, #161b22 0%, #0d1117 100%);
+  border: 1px solid #30363d;
+  border-radius: 14px;
+  padding: 24px;
+}
+
+/* Section titles */
+.section-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 18px;
+  font-weight: 600;
+  margin-bottom: 16px;
+}
+
+/* Inputs */
+.input {
+  width: 100%;
+  padding: 12px 14px;
+  background: #0d1117;
+  border: 1px solid #30363d;
+  border-radius: 8px;
+  color: #e6edf3;
+  font-size: 14px;
+}
+
+.input::placeholder {
+  color: #8b949e;
+}
+
+.input:focus {
+  outline: none;
+  border-color: #58a6ff;
+}
+
+/* Buttons */
+.btn {
+  padding: 12px 16px;
+  border-radius: 8px;
+  font-weight: 600;
+  cursor: pointer;
+  border: none;
+}
+
+.btn-primary {
+  background: #1f6feb;
+  color: white;
+}
+
+.btn-green {
+  background: #238636;
+  color: white;
+}
+
+.btn-danger {
+  background: #da3633;
+  color: white;
+}
+
+/* Table */
+.table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.table th {
+  text-align: left;
+  font-size: 13px;
+  color: #8b949e;
+  padding: 12px 0;
+}
+
+.table td {
+  padding: 14px 0;
+  border-top: 1px solid #21262d;
+}
+
+.badge-long {
+  color: #3fb950;
+}
+
+.badge-short {
+  color: #f85149;
+}

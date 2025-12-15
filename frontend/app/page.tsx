@@ -6,6 +6,8 @@ import Link from "next/link";
 import { api } from "../lib/api";
 import { TrendingUp, Users, DollarSign, Plus } from "lucide-react";
 import { ConnectButton } from "@rainbow-me/rainbowkit";
+import { useRouter } from "next/navigation";
+import { useAccount } from "wagmi";
 
 type Leader = {
   leaderId: number;
@@ -18,6 +20,17 @@ type Leader = {
 
 export default function Page() {
   const [activeTab, setActiveTab] = useState("ETH-USD");
+
+  const router = useRouter();
+  const { isConnected } = useAccount();
+
+  const handleCreateStrategy = () => {
+    if (!isConnected) {
+      alert("Please connect your wallet first");
+      return;
+    }
+    router.push("/create-strategy");
+  };
 
   const { data, isLoading, error } = useQuery({
     queryKey: ["leaders"],
@@ -237,6 +250,7 @@ export default function Page() {
           ))}
           <div style={{ flex: 1 }} />
           <button
+            onClick={handleCreateStrategy}
             style={{
               backgroundColor: "#238636",
               color: "#ffffff",
@@ -376,6 +390,7 @@ export default function Page() {
                         </div>
                       </div>
                       <button
+                        onClick={handleCreateStrategy}
                         style={{
                           marginTop: "16px",
                           backgroundColor: "#238636",

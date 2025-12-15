@@ -4,30 +4,26 @@ export default function PositionTable({
   positions: any[];
 }) {
   return (
-    <table className="w-full border rounded-xl overflow-hidden">
-      <thead className="bg-muted">
+    <table className="table">
+      <thead>
         <tr>
-          <th className="p-2 text-left">Market</th>
-          <th className="p-2">Side</th>
-          <th className="p-2">Size</th>
-          <th className="p-2">Entry</th>
-          <th className="p-2">PnL</th>
+          <th>Market</th>
+          <th>Side</th>
+          <th>Size</th>
+          <th>Entry</th>
+          <th>PnL</th>
         </tr>
       </thead>
       <tbody>
-        {positions.map((p, i) => (
-          <tr key={i} className="border-t">
-            <td className="p-2">{p.indexToken}</td>
-            <td className="p-2">{p.isLong ? "Long" : "Short"}</td>
-            <td className="p-2">${Number(p.sizeUsd) / 1e18}</td>
-            <td className="p-2">${Number(p.entryPrice) / 1e18}</td>
-            <td
-              className={`p-2 ${
-                Number(p.pnlUsd) >= 0 ? "text-green-600" : "text-red-600"
-              }`}
-            >
-              {p.pnlUsd ? Number(p.pnlUsd) / 1e18 : "-"}
+        {positions.map((p) => (
+          <tr key={p.id}>
+            <td>{p.indexToken}</td>
+            <td className={p.isLong ? "badge-long" : "badge-short"}>
+              {p.isLong ? "Long" : "Short"}
             </td>
+            <td>${Number(p.sizeUsd) / 1e18}</td>
+            <td>${Number(p.entryPrice) / 1e18}</td>
+            <td>-</td>
           </tr>
         ))}
       </tbody>
