@@ -5,9 +5,9 @@ export const createStrategy = async (
   req: FastifyRequest,
   reply: FastifyReply
 ) => {
-  const { leaderAddress, meta, feeBps } = req.body as any;
+  const { address, meta, feeBps } = req.body as any;
   const strategy = await strategyService.createStrategy(
-    leaderAddress,
+    address,
     meta,
     feeBps
   );
