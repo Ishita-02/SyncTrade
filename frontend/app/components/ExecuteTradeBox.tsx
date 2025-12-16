@@ -1,14 +1,21 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { X, Settings, RefreshCw, ChevronDown, Info, Wallet } from "lucide-react";
+import { useState } from "react";
+import { Settings, RefreshCw, Info, Wallet } from "lucide-react";
 
-export default function ExecuteTradeBox({ leaderId = 1 }: { leaderId?: number }) {
+// Update props to accept 'market' string
+interface ExecuteTradeBoxProps {
+  market: string; // e.g., "ETH-USD"
+}
+
+export default function ExecuteTradeBox({ market }: ExecuteTradeBoxProps) {
+  // Extract asset name for internal logic (e.g., "ETH" from "ETH-USD")
+  const asset = market.split('-')[0];
+
   // State
-  const [market, setMarket] = useState("ETH");
   const [side, setSide] = useState<"Long" | "Short">("Long");
   const [collateral, setCollateral] = useState("");
-  const [leverage, setLeverage] = useState(1.1); // Default strictly numeric for math
+  const [leverage, setLeverage] = useState(1.1); 
   const [showModal, setShowModal] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
 
@@ -16,9 +23,13 @@ export default function ExecuteTradeBox({ leaderId = 1 }: { leaderId?: number })
   const prices: Record<string, number> = {
     ETH: 3272.50,
     BTC: 64200.00,
-    SOL: 145.20
+    SOL: 145.20,
+    ARB: 1.15,
+    LINK: 14.50
   };
-  const currentPrice = prices[market] || 0;
+
+  // Fallback price if asset isn't in mock list
+  const currentPrice = prices[asset] || 0;
   const walletBalance = 1240.50;
 
   // --- CALCULATIONS (GMX Logic) ---
@@ -31,8 +42,6 @@ export default function ExecuteTradeBox({ leaderId = 1 }: { leaderId?: number })
   const totalFees = openFee + executionFee;
   
   // Liquidation Price
-  // Long Liq = Entry * (1 - (1/Leverage) + (MaintenanceMargin))
-  // Simplified for UI: 
   const liqThreshold = 0.9; // Liquidation at 90% loss
   const liquidationPrice = side === "Long"
     ? currentPrice * (1 - (1/leverage) * liqThreshold)
@@ -55,7 +64,7 @@ export default function ExecuteTradeBox({ leaderId = 1 }: { leaderId?: number })
 
   return (
     <div style={{
-      backgroundColor: "#111418", // Darker background from screenshot
+      backgroundColor: "#111418",
       border: "1px solid #2a2e35",
       borderRadius: "12px",
       padding: "16px",
@@ -67,18 +76,18 @@ export default function ExecuteTradeBox({ leaderId = 1 }: { leaderId?: number })
       {/* --- HEADER --- */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px" }}>
         <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-          <span style={{ fontSize: "15px", fontWeight: "600" }}>Copying Leader #{leaderId}</span>
+          {/* Static Header showing active market */}
+          <span style={{ fontSize: "15px", fontWeight: "600" }}>Trade {market}</span>
         </div>
         <Settings size={18} color="#8b949e" style={{ cursor: "pointer" }} />
       </div>
 
       <form onSubmit={handleExecute}>
         
-        {/* --- MARKET SELECTOR --- */}
+        {/* --- MARKET DISPLAY (READ-ONLY) --- */}
         <div style={{ marginBottom: "16px" }}>
           <label style={{ fontSize: "12px", color: "#8b949e", marginBottom: "6px", display: "block" }}>Market</label>
           <div style={{ 
-            position: "relative", 
             backgroundColor: "#1c2128", 
             border: "1px solid #30363d", 
             borderRadius: "8px",
@@ -86,29 +95,20 @@ export default function ExecuteTradeBox({ leaderId = 1 }: { leaderId?: number })
             display: "flex",
             justifyContent: "space-between",
             alignItems: "center",
-            cursor: "pointer"
+            // Removed cursor: pointer to indicate it's not clickable
           }}>
             <div style={{ display: "flex", alignItems: "center", gap: "8px", fontWeight: "600" }}>
-              <img src={`https://raw.githubusercontent.com/spothq/cryptocurrency-icons/master/32/color/${market.toLowerCase()}.png`} 
-                   alt={market} width={24} height={24} 
+              <img src={`https://raw.githubusercontent.com/spothq/cryptocurrency-icons/master/32/color/${asset.toLowerCase()}.png`} 
+                   alt={asset} width={24} height={24} 
                    onError={(e) => (e.currentTarget.style.display = 'none')}
               />
-              <span>{market} / USD</span>
+              <span>{market}</span>
             </div>
             <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end" }}>
                <span style={{ fontSize: "14px", color: "#238636" }}>${currentPrice.toLocaleString()}</span>
             </div>
             
-            {/* Invisible Select overlay for functionality */}
-            <select 
-              value={market} 
-              onChange={(e) => setMarket(e.target.value)}
-              style={{ position: "absolute", top:0, left:0, width:"100%", height:"100%", opacity:0, cursor:"pointer" }}
-            >
-              <option value="ETH">ETH</option>
-              <option value="BTC">BTC</option>
-              <option value="SOL">SOL</option>
-            </select>
+            {/* Removed the <select> overlay logic entirely */}
           </div>
         </div>
 
@@ -167,7 +167,7 @@ export default function ExecuteTradeBox({ leaderId = 1 }: { leaderId?: number })
           />
         </div>
 
-        {/* --- TRADE SUMMARY (THE GMX "FIX") --- */}
+        {/* --- TRADE SUMMARY --- */}
         <div style={{ 
           backgroundColor: "#161b22", 
           border: "1px solid #30363d", 
@@ -216,7 +216,7 @@ export default function ExecuteTradeBox({ leaderId = 1 }: { leaderId?: number })
           {isProcessing ? (
             <> <RefreshCw className="animate-spin" size={18} /> Processing... </>
           ) : (
-            `${side} ${market}`
+            `${side} ${asset}`
           )}
         </button>
 
