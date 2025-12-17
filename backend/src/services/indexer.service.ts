@@ -6,9 +6,9 @@
 
 import { publicClient } from "../utils/viem.js";
 import prisma from "../db/prisma.js";
-import coreAbi from "../../../artifacts/contracts/Core.sol/Core.json";
+import {coreABI} from "../abi/core.js";
 import { config } from "../config.js";
-import { parseAbi } from 'viem'
+import { parseAbi, decodeEventLog } from 'viem'
 
 const safeHash = (hash: `0x${string}` | null | undefined): string | undefined =>
   hash ? String(hash) : undefined;
@@ -22,16 +22,35 @@ const safeBlock = (b: bigint | null): number | undefined =>
  */
 async function persistEvent(event: string, args: any, txHash?: string, blockNumber?: number) {
   try {
+    // 1. Serialize BigInts to Strings for the JSON 'args' column
+    const safeArgs = JSON.parse(JSON.stringify(args, (key, value) =>
+      typeof value === 'bigint' ? value.toString() : value
+    ));
+
+    // 2. Extract Leader ID if present
+    const rawLeaderId = args?.leaderId ? Number(args.leaderId) : null;
+
     await prisma.eventLog.create({
       data: {
         event,
-        args: args ? args : {},
+        args: safeArgs, // Save the full payload here (including follower address)
         txHash: txHash ?? null,
         blockNumber: blockNumber ?? null,
-        leaderId: args?.leaderId != null ? Number(args.leaderId) : null,
-        follower: args?.follower ?? null,
+
+        // --- FIX 1: Use 'connect' for Leader ---
+        // This links the event to the Leader model safely using the unique leaderId
+        leader: rawLeaderId ? {
+          connect: { leaderId: rawLeaderId }
+        } : undefined,
+
+        // --- FIX 2: Remove 'follower' assignment ---
+        // We cannot link the follower here because we only have an address string (args.follower),
+        // but the DB requires an internal Integer ID (followerId).
+        // Since 'args' (line 14) already contains the follower address, we don't lose data.
       },
     });
+
+    console.log(`✅ Persisted event: ${event}`);
   } catch (err) {
     console.error("persistEvent error", err);
   }
@@ -49,7 +68,18 @@ export const startIndexer = async () => {
     eventName: "LeaderRegistered",
     onLogs: async (logs) => {
       for (const l of logs) {
-        const args = l.args as any;
+        console.log("log", l)
+        let args = l.args as any;
+        if (!args) {
+            console.log("⚠️ Args undefined, attempting manual decode...");
+            const decoded = decodeEventLog({
+              abi: coreABI,
+              data: l.data,
+              topics: l.topics,
+            });
+            args = decoded.args;
+            console.log(args)
+          }
         const leaderId = Number(args.leaderId);
         const leaderAddr = args.leader;
         const meta = args.meta ?? null;
@@ -284,6 +314,74 @@ export const startIndexer = async () => {
     onLogs: async (logs) => {
       for (const l of logs) {
         await persistEvent("PositionClosed", l.args, safeHash(l.transactionHash), safeBlock(l.blockNumber));
+      }
+    },
+  });
+
+  // ---------------------------------------------------------
+  // MISSING HANDLER: LeaderSignal (Tracks Leader's Own Position)
+  // ---------------------------------------------------------
+  watch({
+    address: config.CORE_CONTRACT as `0x${string}`,
+    abi: parseAbi(['event LeaderSignal(uint256 leaderId, string action, uint256 sizeUsd, bool isLong, address indexToken)']),
+    eventName: "LeaderSignal",
+    onLogs: async (logs) => {
+      for (const l of logs) {
+        const args = l.args as any;
+        const leaderId = Number(args.leaderId);
+        const action = args.action; // "OPEN_LONG", "OPEN_SHORT", "CLOSE"
+        const sizeUsd = args.sizeUsd.toString();
+        const isLong = Boolean(args.isLong);
+        const indexToken = args.indexToken;
+
+        console.log(`🔔 Leader Signal: #${leaderId} - ${action}`);
+
+        // CASE 1: Leader OPENS a position
+        if (action === "OPEN_LONG" || action === "OPEN_SHORT") {
+          await prisma.position.create({
+            data: {
+              leaderId: leaderId,
+              // IMPORTANT: Follower is NULL because this is the Leader's own position
+              follower: null, 
+              // We connect the Leader relation
+              leader: { connect: { leaderId: leaderId } },
+              
+              action: action,
+              isLong: isLong,
+              sizeUsd: sizeUsd,
+              isOpen: true,
+              indexToken: indexToken,
+              entryPrice: "0", // Event doesn't emit price, you might need to fetch it or leave 0
+              txHash: safeHash(l.transactionHash),
+              timestamp: new Date(),
+            } as any,
+          });
+        } 
+        
+        // CASE 2: Leader CLOSES a position
+        else if (action === "CLOSE") {
+          // Find the Leader's specific open position (where follower is null)
+          const openPos = await prisma.position.findFirst({
+            where: {
+              leaderId: leaderId,
+              followerId: null, // Ensure we get the leader's row, not a follower's
+              isOpen: true
+            },
+            orderBy: { id: 'desc' }
+          });
+
+          if (openPos) {
+            await prisma.position.update({
+              where: { id: openPos.id },
+              data: {
+                isOpen: false,
+                // You might want to update exitPrice here if you fetch it
+              } as any
+            });
+          }
+        }
+
+        await persistEvent("LeaderSignal", args, safeHash(l.transactionHash), safeBlock(l.blockNumber));
       }
     },
   });

@@ -1,12 +1,13 @@
 import { FastifyRequest, FastifyReply } from "fastify";
 import { strategyService } from "../services/strategy.service.js";
 
-export const createStrategy = async (
+export const  createStrategy = async (
   req: FastifyRequest,
   reply: FastifyReply
 ) => {
-  const { address, meta, feeBps } = req.body as any;
+  const { leaderId, address, meta, feeBps } = req.body as any;
   const strategy = await strategyService.createStrategy(
+    leaderId,
     address,
     meta,
     feeBps
