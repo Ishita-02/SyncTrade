@@ -6,98 +6,78 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { ConnectButton } from "@rainbow-me/rainbowkit";
 import { ArrowLeft, User, TrendingUp, DollarSign, Activity, MousePointerClick } from "lucide-react";
+import { useQuery } from "@tanstack/react-query"; // IMPORT THIS
+import { api } from "@/lib/api"; // Ensure this path is correct
 
-// Adjust imports based on your folder structure
 import SubscribeBox from "../../components/SubscribeBox";
-// import ExecuteTradeBox from "@/components/ExecuteTradeBox"; // Uncomment if needed
 import CandlestickChart from "../../components/CandleStickChart";
+
+// --- TYPES ---
+type LeaderDetail = {
+  leaderId: number;
+  address: string;
+  meta: string;
+  totalAUM: number;
+  totalPnL: number;
+  totalFollowers: number;
+};
+
+type Position = {
+  id: number;
+  market: string;
+  side: "Long" | "Short";
+  collateral: string | number; // Handle both from API
+  leverage: string | number;
+  entryPrice: string | number;
+  currentPrice: string | number;
+  pnl: string | number;
+  pnlPercent: string | number;
+  isOpen: boolean;
+};
 
 export default function LeaderPage() {
   const { id } = useParams();
   const leaderId = Number(id);
   const { address } = useAccount();
 
-  const [mounted, setMounted] = useState(false);
   const [marketFilter, setMarketFilter] = useState("All");
-  
-  // STATE: Which chart to show? Default to ETH-USD, or the leader's top position
   const [selectedMarket, setSelectedMarket] = useState("ETH-USD");
 
-  useEffect(() => {
-    setMounted(true);
-  }, []);
+  // --- 1. FETCH LEADER DETAILS ---
+  const { data: leader, isLoading: isLeaderLoading } = useQuery({
+    queryKey: ["leader", leaderId],
+    queryFn: () => api<LeaderDetail>(`/leaders/${leaderId}`),
+  });
 
-  const leader = {
-    leaderId,
-    address: `0x${address?.slice(2) || "123...abc"}`,
-    meta: "Multi-Market Strategy",
-    totalAUM: 12500,
-    totalPnL: 1850,
-    totalFollowers: 45,
-  };
+  // --- 2. FETCH LEADER POSITIONS ---
+  const { data: rawPositions, isLoading: isPositionsLoading } = useQuery({
+    queryKey: ["leader-positions", leaderId],
+    queryFn: () => api<Position[]>(`/leaders/${leaderId}/positions`),
+  });
 
-  const allPositions = [
-    {
-      id: 1,
-      market: "ETH-USD",
-      side: "Long",
-      collateral: "1000",
-      leverage: "5x",
-      entryPrice: "3200",
-      currentPrice: "3400",
-      pnl: "+312.50",
-      pnlPercent: "+31.25%",
-      isOpen: true,
-    },
-    {
-      id: 2,
-      market: "BTC-USD",
-      side: "Short",
-      collateral: "2000",
-      leverage: "3x",
-      entryPrice: "68000",
-      currentPrice: "67200",
-      pnl: "+176.47",
-      pnlPercent: "+8.82%",
-      isOpen: true,
-    },
-    {
-      id: 3,
-      market: "SOL-USD",
-      side: "Long",
-      collateral: "500",
-      leverage: "10x",
-      entryPrice: "95",
-      currentPrice: "102",
-      pnl: "+368.42",
-      pnlPercent: "+73.68%",
-      isOpen: true,
-    },
-    {
-      id: 4,
-      market: "ETH-USD",
-      side: "Long",
-      collateral: "1500",
-      leverage: "2x",
-      entryPrice: "3100",
-      currentPrice: "3400",
-      pnl: "+290.32",
-      pnlPercent: "+19.35%",
-      isOpen: true,
-    },
-    {
-      id: 5,
-      market: "BTC-USD",
-      side: "Long",
-      collateral: "800",
-      leverage: "4x",
-      entryPrice: "65000",
-      currentPrice: "67200",
-      pnl: "+215.38",
-      pnlPercent: "+26.92%",
-      isOpen: false,
-    },
-  ];
+   const { data: rawStats, isLoading: isStatsLoading } = useQuery({
+    queryKey: ["leader-positions", leaderId],
+    queryFn: () => api<Position[]>(`/leaders/${leaderId}/stats`),
+  });
+
+  console.log("data", rawStats)
+
+  // --- DATA PROCESSING ---
+  // If backend returns raw numbers, we format them here for the UI
+  const allPositions = (rawPositions || []).map((p) => ({
+    ...p,
+    collateral: Number(p.collateral).toLocaleString(),
+    leverage: typeof p.leverage === 'number' ? `${p.leverage}x` : p.leverage,
+    entryPrice: Number(p.entryPrice).toLocaleString(),
+    currentPrice: Number(p.currentPrice).toLocaleString(),
+    // Add signs to PnL if missing
+    pnl: String(p.pnl).startsWith("-") || String(p.pnl).startsWith("+") 
+         ? p.pnl 
+         : Number(p.pnl) >= 0 ? `+${p.pnl}` : `${p.pnl}`,
+    pnlPercent: String(p.pnlPercent).includes("%") 
+         ? p.pnlPercent 
+         : `${Number(p.pnlPercent).toFixed(2)}%`
+  }));
 
   const filteredPositions =
     marketFilter === "All"
@@ -105,6 +85,24 @@ export default function LeaderPage() {
       : allPositions.filter((p) => p.market.startsWith(marketFilter));
 
   const openPositions = filteredPositions.filter((p) => p.isOpen);
+
+  // --- LOADING STATE ---
+  if (isLeaderLoading || isPositionsLoading) {
+    return (
+      <div style={{ backgroundColor: "#0f1419", minHeight: "100vh", color: "#e6edf3", display: "flex", justifyContent: "center", alignItems: "center" }}>
+        Loading strategy data...
+      </div>
+    );
+  }
+
+  // --- ERROR STATE (e.g. Leader not found) ---
+  if (!leader) {
+    return (
+      <div style={{ backgroundColor: "#0f1419", minHeight: "100vh", color: "#e6edf3", display: "flex", justifyContent: "center", alignItems: "center" }}>
+        Leader not found.
+      </div>
+    );
+  }
 
   return (
     <div style={{ backgroundColor: "#0f1419", minHeight: "100vh", color: "#e6edf3" }}>
@@ -122,15 +120,7 @@ export default function LeaderPage() {
         {/* Back */}
         <Link
           href="/"
-          style={{
-            display: "inline-flex",
-            alignItems: "center",
-            gap: "8px",
-            marginBottom: "16px",
-            color: "#8b949e",
-            textDecoration: "none",
-            fontSize: "14px",
-          }}
+          style={{ display: "inline-flex", alignItems: "center", gap: "8px", marginBottom: "16px", color: "#8b949e", textDecoration: "none", fontSize: "14px" }}
         >
           <ArrowLeft size={16} />
           Back to Strategies
@@ -139,17 +129,8 @@ export default function LeaderPage() {
         {/* Strategy Header */}
         <div style={{ marginBottom: "24px" }}>
           <h2 style={{ fontSize: "28px", fontWeight: 700 }}>
-            {leader.meta}
-            <span
-              style={{
-                marginLeft: "12px",
-                padding: "4px 12px",
-                borderRadius: "20px",
-                backgroundColor: "#1f6feb",
-                fontSize: "12px",
-                fontWeight: 600,
-              }}
-            >
+            {leader.meta || `Strategy #${leader.leaderId}`}
+            <span style={{ marginLeft: "12px", padding: "4px 12px", borderRadius: "20px", backgroundColor: "#1f6feb", fontSize: "12px", fontWeight: 600 }}>
               Active
             </span>
           </h2>
@@ -162,7 +143,8 @@ export default function LeaderPage() {
 
         {/* Portfolio Stats */}
         <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "16px", marginBottom: "32px" }}>
-          {/* ... (Your existing Stats Cards - kept exactly same) ... */}
+          
+          {/* AUM */}
           <div style={{ backgroundColor: "#161b22", border: "1px solid #30363d", borderRadius: "12px", padding: "20px" }}>
             <div style={{ display: "flex", alignItems: "center", gap: "12px", marginBottom: "8px" }}>
               <div style={{ width: "40px", height: "40px", borderRadius: "8px", backgroundColor: "#21262d", display: "flex", alignItems: "center", justifyContent: "center" }}>
@@ -170,11 +152,12 @@ export default function LeaderPage() {
               </div>
               <div>
                 <div style={{ color: "#8b949e", fontSize: "12px", marginBottom: "2px" }}>Total AUM</div>
-                <div style={{ color: "#e6edf3", fontSize: "20px", fontWeight: "700" }}>${leader.totalAUM.toLocaleString()}</div>
+                <div style={{ color: "#e6edf3", fontSize: "20px", fontWeight: "700" }}>${Number(leader.totalAUM).toLocaleString()}</div>
               </div>
             </div>
           </div>
-          {/* ... Other stats ... */}
+
+          {/* PnL */}
           <div style={{ backgroundColor: "#161b22", border: "1px solid #30363d", borderRadius: "12px", padding: "20px" }}>
             <div style={{ display: "flex", alignItems: "center", gap: "12px", marginBottom: "8px" }}>
               <div style={{ width: "40px", height: "40px", borderRadius: "8px", backgroundColor: "#1a3a1a", display: "flex", alignItems: "center", justifyContent: "center" }}>
@@ -182,10 +165,14 @@ export default function LeaderPage() {
               </div>
               <div>
                 <div style={{ color: "#8b949e", fontSize: "12px", marginBottom: "2px" }}>Total P&L</div>
-                <div style={{ color: "#26a641", fontSize: "20px", fontWeight: "700" }}>+${leader.totalPnL.toLocaleString()}</div>
+                <div style={{ color: "#26a641", fontSize: "20px", fontWeight: "700" }}>
+                   {Number(leader.totalPnL) > 0 ? "+" : ""}${Number(leader.totalPnL).toLocaleString()}
+                </div>
               </div>
             </div>
           </div>
+
+          {/* Open Positions Count */}
           <div style={{ backgroundColor: "#161b22", border: "1px solid #30363d", borderRadius: "12px", padding: "20px" }}>
              <div style={{ display: "flex", alignItems: "center", gap: "12px", marginBottom: "8px" }}>
               <div style={{ width: "40px", height: "40px", borderRadius: "8px", backgroundColor: "#21262d", display: "flex", alignItems: "center", justifyContent: "center" }}>
@@ -197,6 +184,8 @@ export default function LeaderPage() {
               </div>
             </div>
           </div>
+
+          {/* Followers */}
           <div style={{ backgroundColor: "#161b22", border: "1px solid #30363d", borderRadius: "12px", padding: "20px" }}>
              <div style={{ display: "flex", alignItems: "center", gap: "12px", marginBottom: "8px" }}>
               <div style={{ width: "40px", height: "40px", borderRadius: "8px", backgroundColor: "#21262d", display: "flex", alignItems: "center", justifyContent: "center" }}>
@@ -220,11 +209,10 @@ export default function LeaderPage() {
                  Viewing Chart: <strong style={{ color: "#e6edf3" }}>{selectedMarket}</strong>
                </span>
             </div>
-            {/* DYNAMIC CHART: Passes the selected market to the component */}
             <CandlestickChart symbol={selectedMarket} />
           </div>
 
-          {/* Right: Subscribe & Execute Boxes */}
+          {/* Right: Subscribe Box */}
           <div style={{ display: "flex", flexDirection: "column", gap: "24px" }}>
             <div style={{ backgroundColor: "#161b22", border: "1px solid #30363d", borderRadius: "12px", padding: "24px" }}>
               <h3 style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "18px", fontWeight: 600, marginBottom: "16px" }}>
@@ -274,47 +262,53 @@ export default function LeaderPage() {
                 </tr>
               </thead>
               <tbody>
-                {filteredPositions.map((position) => {
-                  const isPnlPositive = position.pnl.startsWith("+");
-                  // Check if this row is currently selected in the chart
-                  const isSelected = selectedMarket === position.market;
+                {filteredPositions.length === 0 ? (
+                  <tr>
+                    <td colSpan={8} style={{ padding: "32px", textAlign: "center", color: "#8b949e" }}>
+                      No positions found for this strategy.
+                    </td>
+                  </tr>
+                ) : (
+                  filteredPositions.map((position) => {
+                    const isPnlPositive = String(position.pnl).startsWith("+");
+                    const isSelected = selectedMarket === position.market;
 
-                  return (
-                    <tr 
-                      key={position.id} 
-                      onClick={() => setSelectedMarket(position.market)} // CLICK HANDLER
-                      style={{ 
-                        borderBottom: "1px solid #30363d", 
-                        cursor: "pointer", 
-                        backgroundColor: isSelected ? "#1f242e" : "transparent", // Highlight selected row
-                        transition: "background 0.2s"
-                      }}
-                      // Add hover effect via CSS class or inline style if preferred
-                    >
-                      <td style={{ padding: "16px", color: "#e6edf3", fontWeight: "600" }}>{position.market}</td>
-                      <td style={{ padding: "16px" }}>
-                        <span style={{ padding: "4px 10px", borderRadius: "6px", fontSize: "12px", fontWeight: "600", backgroundColor: position.side === "Long" ? "rgba(38, 166, 65, 0.1)" : "rgba(248, 81, 73, 0.1)", color: position.side === "Long" ? "#26a641" : "#f85149" }}>
-                          {position.side}
-                        </span>
-                      </td>
-                      <td style={{ padding: "16px", color: "#e6edf3" }}>${position.collateral}</td>
-                      <td style={{ padding: "16px", color: "#e6edf3" }}>{position.leverage}</td>
-                      <td style={{ padding: "16px", color: "#e6edf3", fontFamily: "monospace" }}>${position.entryPrice}</td>
-                      <td style={{ padding: "16px", color: "#e6edf3", fontFamily: "monospace" }}>${position.currentPrice}</td>
-                      <td style={{ padding: "16px" }}>
-                        <div style={{ display: "flex", flexDirection: "column", gap: "2px" }}>
-                          <span style={{ color: isPnlPositive ? "#26a641" : "#f85149", fontWeight: "600", fontSize: "14px" }}>{position.pnl}</span>
-                          <span style={{ color: isPnlPositive ? "#26a641" : "#f85149", fontSize: "11px" }}>{position.pnlPercent}</span>
-                        </div>
-                      </td>
-                      <td style={{ padding: "16px" }}>
-                        <span style={{ padding: "4px 10px", borderRadius: "6px", fontSize: "11px", fontWeight: "600", backgroundColor: position.isOpen ? "rgba(31, 111, 235, 0.1)" : "rgba(139, 148, 158, 0.1)", color: position.isOpen ? "#58a6ff" : "#8b949e" }}>
-                          {position.isOpen ? "OPEN" : "CLOSED"}
-                        </span>
-                      </td>
-                    </tr>
-                  );
-                })}
+                    return (
+                      <tr 
+                        key={position.id} 
+                        onClick={() => setSelectedMarket(position.market)}
+                        style={{ 
+                          borderBottom: "1px solid #30363d", 
+                          cursor: "pointer", 
+                          backgroundColor: isSelected ? "#1f242e" : "transparent",
+                          transition: "background 0.2s"
+                        }}
+                      >
+                        <td style={{ padding: "16px", color: "#e6edf3", fontWeight: "600" }}>{position.market}</td>
+                        <td style={{ padding: "16px" }}>
+                          <span style={{ padding: "4px 10px", borderRadius: "6px", fontSize: "12px", fontWeight: "600", backgroundColor: position.side === "Long" ? "rgba(38, 166, 65, 0.1)" : "rgba(248, 81, 73, 0.1)", color: position.side === "Long" ? "#26a641" : "#f85149" }}>
+                            {position.side}
+                          </span>
+                        </td>
+                        <td style={{ padding: "16px", color: "#e6edf3" }}>${position.collateral}</td>
+                        <td style={{ padding: "16px", color: "#e6edf3" }}>{position.leverage}</td>
+                        <td style={{ padding: "16px", color: "#e6edf3", fontFamily: "monospace" }}>${position.entryPrice}</td>
+                        <td style={{ padding: "16px", color: "#e6edf3", fontFamily: "monospace" }}>${position.currentPrice}</td>
+                        <td style={{ padding: "16px" }}>
+                          <div style={{ display: "flex", flexDirection: "column", gap: "2px" }}>
+                            <span style={{ color: isPnlPositive ? "#26a641" : "#f85149", fontWeight: "600", fontSize: "14px" }}>{position.pnl}</span>
+                            <span style={{ color: isPnlPositive ? "#26a641" : "#f85149", fontSize: "11px" }}>{position.pnlPercent}</span>
+                          </div>
+                        </td>
+                        <td style={{ padding: "16px" }}>
+                          <span style={{ padding: "4px 10px", borderRadius: "6px", fontSize: "11px", fontWeight: "600", backgroundColor: position.isOpen ? "rgba(31, 111, 235, 0.1)" : "rgba(139, 148, 158, 0.1)", color: position.isOpen ? "#58a6ff" : "#8b949e" }}>
+                            {position.isOpen ? "OPEN" : "CLOSED"}
+                          </span>
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
               </tbody>
             </table>
           </div>

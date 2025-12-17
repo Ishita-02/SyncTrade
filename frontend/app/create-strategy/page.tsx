@@ -1,10 +1,14 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { api } from "../../lib/api";
-import { useAccount } from "wagmi";
+import { useAccount, useWriteContract, useWaitForTransactionReceipt } from "wagmi";
+import { decodeEventLog } from "viem"; // Import this to parse logs
 import { ArrowLeft } from "lucide-react";
+import coreABI from "../../abi/Core.json"; 
+
+const CONTRACT_ADDRESS = "0x610178da211fef7d417bc0e6fed39f05609ad788";
 
 export default function CreateStrategyPage() {
   const router = useRouter();
@@ -12,40 +16,97 @@ export default function CreateStrategyPage() {
 
   const [meta, setMeta] = useState("");
   const [feeBps, setFeeBps] = useState(0);
-  const [loading, setLoading] = useState(false);
+  const [isSyncing, setIsSyncing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const submit = async () => {
-    if (!isConnected || !address) {
-      setError("Please connect your wallet");
-      return;
+  const { writeContract, data: hash, isPending: isWalletPending, error: contractError } = useWriteContract();
+
+  // Get the full receipt, which contains the Logs/Events
+  const { data: receipt, isLoading: isConfirming, isSuccess: isConfirmed } = useWaitForTransactionReceipt({
+    hash,
+  });
+
+  useEffect(() => {
+    if (isConfirmed && receipt && !isSyncing) {
+      syncWithBackend(receipt);
     }
+  }, [isConfirmed, receipt]);
 
-    if (!meta.trim()) {
-      setError("Strategy description is required");
-      return;
-    }
-
-    setLoading(true);
-    setError(null);
-
+  const syncWithBackend = async (txReceipt: any) => {
+    setIsSyncing(true);
     try {
+      // 1. Find the "LeaderRegistered" event log
+      let leaderId = null;
+
+      for (const log of txReceipt.logs) {
+        try {
+          const event = decodeEventLog({
+            abi: coreABI,
+            data: log.data,
+            topics: log.topics,
+          });
+
+          console.log("event", event)
+          
+          if (event.eventName === "LeaderRegistered") {
+            // @ts-ignore
+            leaderId = Number(event.args.leaderId);
+            break;
+          }
+        } catch (e) {
+          // Ignore logs that don't match our ABI (e.g. standard ERC20 events)
+          continue; 
+        }
+      }
+
+      if (leaderId === null) {
+        throw new Error("Could not find Leader ID in transaction logs");
+      }
+
+      console.log("Found Leader ID from Blockchain:", leaderId);
+
+      // 2. Send the REAL ID to the backend
       await api("/strategies", {
         method: "POST",
         body: JSON.stringify({
-          address: `0x${address}`,
+          leaderId: leaderId, // Pass the ID here!
+          address: address as `0x${string}`,
           meta,
           feeBps,
         }),
       });
 
       router.push("/");
-    } catch (e) {
+    } catch (e: any) {
       console.error(e);
-      setError("Failed to create strategy");
+      setError(`Sync Failed: ${e.message}`);
     } finally {
-      setLoading(false);
+      setIsSyncing(false);
     }
+  };
+
+  const submit = async () => {
+    if (!isConnected || !address) return setError("Please connect your wallet");
+    if (!meta.trim()) return setError("Strategy description is required");
+
+    setError(null);
+
+    writeContract({
+      address: CONTRACT_ADDRESS,
+      abi: coreABI as any,
+      functionName: "registerLeader",
+      args: [meta, BigInt(feeBps)], 
+    });
+  };
+
+  // ... rest of your UI (return statement) remains exactly the same
+  // (Just copy the return logic from your previous file)
+  const isLoading = isWalletPending || isConfirming || isSyncing;
+  const getButtonText = () => {
+      if (isWalletPending) return "Check Wallet...";
+      if (isConfirming) return "Confirming Transaction...";
+      if (isSyncing) return "Syncing Database...";
+      return "Create Strategy";
   };
 
   return (
@@ -191,7 +252,7 @@ export default function CreateStrategyPage() {
           </div>
 
           {/* Error */}
-          {error && (
+          {(error || contractError) && (
             <div
               style={{
                 marginBottom: "16px",
@@ -199,14 +260,14 @@ export default function CreateStrategyPage() {
                 fontSize: "14px",
               }}
             >
-              {error}
+              {error || (contractError?.message.includes("User rejected") ? "User rejected transaction" : "Transaction Failed")}
             </div>
           )}
 
           {/* Submit */}
           <button
             onClick={submit}
-            disabled={loading}
+            disabled={isLoading}
             style={{
               width: "100%",
               backgroundColor: "#238636",
@@ -217,10 +278,10 @@ export default function CreateStrategyPage() {
               fontWeight: "600",
               cursor: "pointer",
               fontSize: "15px",
-              opacity: loading ? 0.6 : 1,
+              opacity: isLoading ? 0.6 : 1,
             }}
           >
-            {loading ? "Creating..." : "Create Strategy"}
+            {getButtonText()}
           </button>
         </div>
       </div>

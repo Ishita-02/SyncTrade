@@ -1,15 +1,25 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.20;
+pragma solidity ^0.8.0;
 
-contract MockChainlinkFeed {
-    int256 public price;
+/**
+ * @title MockV3Aggregator
+ * @notice Simplified Mock for Chainlink Price Feeds
+ */
+contract MockV3Aggregator {
+    uint8 public decimals;
+    int256 public latestAnswer;
+    uint256 public latestTimestamp;
+    uint256 public getStartedAt;
 
-    constructor(int256 _price) {
-        price = _price;
+    constructor(uint8 _decimals, int256 _initialAnswer) {
+        decimals = _decimals;
+        updateAnswer(_initialAnswer);
     }
 
-    function setPrice(int256 _price) external {
-        price = _price;
+    function updateAnswer(int256 _answer) public {
+        latestAnswer = _answer;
+        latestTimestamp = block.timestamp;
+        getStartedAt = block.timestamp;
     }
 
     function latestRoundData()
@@ -23,6 +33,6 @@ contract MockChainlinkFeed {
             uint80 answeredInRound
         )
     {
-        return (0, price, 0, 0, 0);
+        return (0, latestAnswer, getStartedAt, latestTimestamp, 0);
     }
 }
