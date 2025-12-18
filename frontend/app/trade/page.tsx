@@ -3,18 +3,39 @@
 import { useState } from "react";
 import Link from "next/link";
 import { ConnectButton } from "@rainbow-me/rainbowkit";
+import { useAccount } from "wagmi";
+import { useQuery } from "@tanstack/react-query";
+import { api } from "@/lib/api"; // Ensure this matches your api helper path
 
-// Import your existing components
-// Adjust the import paths ('@/components/...') if your folder structure is different
+// Components
 import CandlestickChart from "../components/CandleStickChart";
 import ExecuteTradeBox from "../components/ExecuteTradeBox";
 
-export default function TradePage() {
-  // Current active market state
-  const [activeMarket, setActiveMarket] = useState("ETH-USD");
+// Type definition for the strategy/leader response
+type MyStrategy = {
+  leaderId: number;
+  address: string;
+  // add other fields if needed
+};
 
-  // List of available markets
+export default function TradePage() {
+  const [activeMarket, setActiveMarket] = useState("ETH-USD");
   const markets = ["ETH-USD", "BTC-USD", "SOL-USD", "ARB-USD", "LINK-USD"];
+
+  // 1. Get connected wallet address
+  const { address, isConnected } = useAccount();
+
+  // 2. Fetch the Leader ID associated with this address
+  const { data: strategy, isLoading: isStrategyLoading } = useQuery({
+    queryKey: ["my-strategy", address],
+    queryFn: () => api<MyStrategy>(`/strategies/me/${address}`),
+    enabled: !!address, // Only run if address exists
+    retry: false,       // Don't retry if 404 (meaning user hasn't created strategy yet)
+  });
+
+  console.log("strategy", strategy)
+
+  const leaderId = strategy?.leaderId;
 
   return (
     <div style={{ backgroundColor: "#0f1419", minHeight: "100vh", color: "#e6edf3" }}>
@@ -73,7 +94,7 @@ export default function TradePage() {
           </div>
         </div>
 
-        {/* TRADING INTERFACE: LEFT (Chart) & RIGHT (Order Form) */}
+        {/* TRADING INTERFACE */}
         <div style={{ display: "flex", gap: "24px", flexDirection: "row", alignItems: "stretch", minHeight: "600px" }}>
           
           {/* LEFT SIDE: CANDLESTICK CHART */}
@@ -85,21 +106,16 @@ export default function TradePage() {
             padding: "24px",
             display: "flex",
             flexDirection: "column",
-            minHeight: "500px" // Ensure height for chart
+            minHeight: "500px"
           }}>
-            {/* <h3 style={{ color: "#8b949e", fontSize: "16px", marginBottom: "16px" }}>
-              {activeMarket} Chart
-            </h3> */}
-            
             <div style={{ flex: 1, position: "relative" }}>
-               {/* Passing activeMarket prop so chart updates when you switch tabs */}
                <CandlestickChart symbol={activeMarket} />
             </div>
           </div>
 
           {/* RIGHT SIDE: EXECUTE TRADE BOX */}
           <div style={{ 
-            width: "380px", // Fixed width for the trading box
+            width: "380px", 
             backgroundColor: "#161b22", 
             border: "1px solid #30363d", 
             borderRadius: "12px", 
@@ -111,8 +127,29 @@ export default function TradePage() {
                Open Position
              </h3>
              
-             {/* Passing activeMarket prop so trade box knows which asset to trade */}
-             <ExecuteTradeBox market={activeMarket} />
+             {/* LOGIC:
+                1. If loading -> Show loading text
+                2. If not connected -> Show "Connect Wallet" message
+                3. If connected but no leaderId -> Show "Create Strategy" message
+                4. If leaderId exists -> Show ExecuteTradeBox 
+             */}
+             
+             {isStrategyLoading ? (
+               <div style={{ color: "#8b949e", textAlign: "center", marginTop: "20px" }}>Loading strategy data...</div>
+             ) : !isConnected ? (
+               <div style={{ textAlign: "center", marginTop: "20px", color: "#f85149" }}>
+                 Please connect your wallet to trade.
+               </div>
+             ) : !leaderId ? (
+               <div style={{ textAlign: "center", marginTop: "20px" }}>
+                 <p style={{ color: "#8b949e", marginBottom: "12px" }}>You don't have an active strategy.</p>
+                 <Link href="/create-strategy" style={{ color: "#58a6ff", textDecoration: "none", fontWeight: "600" }}>
+                   Create a Strategy First &rarr;
+                 </Link>
+               </div>
+             ) : (
+               <ExecuteTradeBox market={activeMarket} leaderId={leaderId} />
+             )}
           </div>
 
         </div>
