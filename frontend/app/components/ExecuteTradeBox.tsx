@@ -1,65 +1,124 @@
 "use client";
 
-import { useState } from "react";
-import { Settings, RefreshCw, Info, Wallet } from "lucide-react";
+import { useState, useEffect } from "react";
+import { Settings, RefreshCw, Info, Wallet, XCircle } from "lucide-react";
+import { api } from "../../lib/api"; 
+import { useWriteContract, useWaitForTransactionReceipt } from "wagmi";
+import { useTokenBalance } from "../hooks/useTokenBalance";
+import { useTokenPrice } from "../hooks/usePrices";
+import { parseUnits } from "viem";
+import { CORE_ABI } from "@/lib/contracts";
 
-// Update props to accept 'market' string
 interface ExecuteTradeBoxProps {
-  market: string; // e.g., "ETH-USD"
+  market: string;   // e.g., "ETH-USD"
+  leaderId: number; // Required to identify which strategy is executing
 }
 
-export default function ExecuteTradeBox({ market }: ExecuteTradeBoxProps) {
-  // Extract asset name for internal logic (e.g., "ETH" from "ETH-USD")
+export default function ExecuteTradeBox({ market, leaderId }: ExecuteTradeBoxProps) {
+  // Extract asset name (e.g., "ETH" from "ETH-USD")
   const asset = market.split('-')[0];
 
   // State
   const [side, setSide] = useState<"Long" | "Short">("Long");
   const [collateral, setCollateral] = useState("");
-  const [leverage, setLeverage] = useState(1.1); 
-  const [showModal, setShowModal] = useState(false);
+  const [leverage, setLeverage] = useState(1.1);
+  const [status, setStatus] = useState<string | null>(null);
+  
+  // UI State
   const [isProcessing, setIsProcessing] = useState(false);
+  const [statusMessage, setStatusMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null);
 
-  // Mock Data (In real app, fetch from Oracle)
-  const prices: Record<string, number> = {
-    ETH: 3272.50,
-    BTC: 64200.00,
-    SOL: 145.20,
-    ARB: 1.15,
-    LINK: 14.50
+  const price = useTokenPrice(asset);
+  const currentPrice = price.price;
+  const usdcToken = process.env.NEXT_PUBLIC_USDC as `0x${string}` | undefined;
+  const walletBalance = useTokenBalance(usdcToken); // Replace with real wallet balance hook
+
+  const CORE_CONTRACT = process.env.NEXT_PUBLIC_CORE_CONTRACT as `0x${string}`;
+  const TOKEN_MAP: Record<string, string> = {
+    "ETH": process.env.NEXT_PUBLIC_WETH || "",
+    "BTC": process.env.NEXT_PUBLIC_WBTC || "",
+    "USDC": process.env.NEXT_PUBLIC_USDC || "",
   };
 
-  // Fallback price if asset isn't in mock list
-  const currentPrice = prices[asset] || 0;
-  const walletBalance = 1240.50;
-
-  // --- CALCULATIONS (GMX Logic) ---
-  const collateralVal = parseFloat(collateral) || 0;
-  const positionSize = collateralVal * leverage;
+  const { writeContract, data: hash, isPending, error: writeError } = useWriteContract();
   
-  // Fees
-  const openFee = positionSize * 0.001; // 0.1%
-  const executionFee = 1.20; // Flat keeper fee
+  const { isLoading: isConfirming, isSuccess } = useWaitForTransactionReceipt({ 
+    hash 
+  });
+
+  // --- CALCULATIONS ---
+  const collateralVal = parseFloat(collateral) || 0;
+  // GMX/Standard Perp Logic: Position Size = Collateral * Leverage
+  const positionSize = collateralVal * leverage; 
+  
+  const openFee = positionSize * 0.001; // 0.1% est.
+  const executionFee = 1.20; 
   const totalFees = openFee + executionFee;
   
-  // Liquidation Price
-  const liqThreshold = 0.9; // Liquidation at 90% loss
+  const liqThreshold = 0.9; 
   const liquidationPrice = side === "Long"
     ? currentPrice * (1 - (1/leverage) * liqThreshold)
     : currentPrice * (1 + (1/leverage) * liqThreshold);
 
-  // Handlers
-  const handleMax = () => setCollateral(walletBalance.toString());
-  
-  const handleExecute = async (e: React.FormEvent) => {
+  // --- API HANDLERS ---
+  useEffect(() => {
+    if (isSuccess) {
+      setStatus("✅ Position Confirmed on Blockchain!");
+      setCollateral("");
+      // NOTE: You do NOT need to call an API here. 
+      // The Backend Indexer will see this transaction and update the DB automatically.
+    }
+  }, [isSuccess]);
+
+const handleOpenPosition = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (collateralVal <= 0) return;
-    
+    if (!collateral) return;
+    setStatus("Please confirm in wallet...");
+
+    // 1. Get Token Address
+    const indexToken = TOKEN_MAP[asset];
+    if (!indexToken) {
+      setStatus(`Error: No address found for ${asset}`);
+      return;
+    }
+
+    // 2. Parse Size (assuming 18 decimals for WETH/ETH, 6 for USDC)
+    // Adjust decimals based on the token if needed
+    const decimals = asset === "USDC" ? 6 : 18;
+    const sizeAmount = parseUnits(collateral, decimals);
+
+    // 3. Send Transaction
+    writeContract({
+      address: CORE_CONTRACT,
+      abi: CORE_ABI as any,
+      functionName: side === "Long" ? "leaderOpenLong" : "leaderOpenShort",
+      args: [
+        BigInt(leaderId),
+        sizeAmount, 
+        indexToken as `0x${string}`
+      ],
+    });
+  };
+
+  const handleClosePosition = async () => {
+    if (!confirm("Are you sure you want to close the current position for this strategy?")) return;
+
     setIsProcessing(true);
-    // Simulate Contract Call
-    setTimeout(() => {
+    setStatusMessage(null);
+
+    try {
+      // Call Close API (Using api function directly)
+      await api(`/strategies/${leaderId}/close`, {
+        method: "POST",
+      });
+      
+      setStatusMessage({ type: 'success', text: "Position closed successfully" });
+    } catch (error: any) {
+      console.error("Close Position Error:", error);
+      setStatusMessage({ type: 'error', text: error?.message || "Failed to close position" });
+    } finally {
       setIsProcessing(false);
-      setShowModal(true);
-    }, 1500);
+    }
   };
 
   return (
@@ -76,26 +135,24 @@ export default function ExecuteTradeBox({ market }: ExecuteTradeBoxProps) {
       {/* --- HEADER --- */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px" }}>
         <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-          {/* Static Header showing active market */}
           <span style={{ fontSize: "15px", fontWeight: "600" }}>Trade {market}</span>
+          <span style={{ fontSize: "12px", color: "#8b949e", backgroundColor: "#1c2128", padding: "2px 6px", borderRadius: "4px" }}>
+             ID: {leaderId}
+          </span>
         </div>
-        <Settings size={18} color="#8b949e" style={{ cursor: "pointer" }} />
+        <div style={{ display: "flex", gap: "8px" }}>
+          <Settings size={18} color="#8b949e" style={{ cursor: "pointer" }} />
+        </div>
       </div>
 
-      <form onSubmit={handleExecute}>
+      <form onSubmit={handleOpenPosition}>
         
-        {/* --- MARKET DISPLAY (READ-ONLY) --- */}
+        {/* --- MARKET DISPLAY --- */}
         <div style={{ marginBottom: "16px" }}>
           <label style={{ fontSize: "12px", color: "#8b949e", marginBottom: "6px", display: "block" }}>Market</label>
           <div style={{ 
-            backgroundColor: "#1c2128", 
-            border: "1px solid #30363d", 
-            borderRadius: "8px",
-            padding: "12px",
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "center",
-            // Removed cursor: pointer to indicate it's not clickable
+            backgroundColor: "#1c2128", border: "1px solid #30363d", borderRadius: "8px", padding: "12px",
+            display: "flex", justifyContent: "space-between", alignItems: "center"
           }}>
             <div style={{ display: "flex", alignItems: "center", gap: "8px", fontWeight: "600" }}>
               <img src={`https://raw.githubusercontent.com/spothq/cryptocurrency-icons/master/32/color/${asset.toLowerCase()}.png`} 
@@ -107,12 +164,10 @@ export default function ExecuteTradeBox({ market }: ExecuteTradeBoxProps) {
             <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end" }}>
                <span style={{ fontSize: "14px", color: "#238636" }}>${currentPrice.toLocaleString()}</span>
             </div>
-            
-            {/* Removed the <select> overlay logic entirely */}
           </div>
         </div>
 
-        {/* --- LONG / SHORT TABS --- */}
+        {/* --- SIDE SELECTOR --- */}
         <div style={{ display: "flex", backgroundColor: "#1c2128", padding: "4px", borderRadius: "8px", marginBottom: "20px" }}>
           <button type="button" onClick={() => setSide("Long")} style={{
             flex: 1, padding: "8px", borderRadius: "6px", fontSize: "14px", fontWeight: "600",
@@ -126,20 +181,17 @@ export default function ExecuteTradeBox({ market }: ExecuteTradeBoxProps) {
           }}>Short</button>
         </div>
 
-        {/* --- INPUTS --- */}
+        {/* --- COLLATERAL INPUT --- */}
         <div style={{ marginBottom: "20px" }}>
           <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "6px", fontSize: "12px", color: "#8b949e" }}>
             <span>Pay</span>
             <span style={{ display: "flex", alignItems: "center", gap: "4px" }}>
-              <Wallet size={12} />
-              {walletBalance.toLocaleString()}
+              <Wallet size={12} /> {walletBalance.balance}
             </span>
           </div>
           <div style={{ position: "relative" }}>
             <input 
-              type="number" 
-              placeholder="0.00"
-              value={collateral}
+              type="number" placeholder="0.00" value={collateral}
               onChange={(e) => setCollateral(e.target.value)}
               style={{
                 width: "100%", backgroundColor: "#0d1117", border: "1px solid #30363d", borderRadius: "8px",
@@ -147,98 +199,83 @@ export default function ExecuteTradeBox({ market }: ExecuteTradeBoxProps) {
               }}
             />
             <div style={{ position: "absolute", right: "12px", top: "50%", transform: "translateY(-50%)", display: "flex", alignItems: "center", gap: "8px" }}>
-              <button type="button" onClick={handleMax} style={{ fontSize: "11px", color: "#58a6ff", background: "none", border: "none", cursor: "pointer" }}>MAX</button>
+              <button type="button" onClick={() => setCollateral(walletBalance.balance)} style={{ fontSize: "11px", color: "#58a6ff", background: "none", border: "none", cursor: "pointer" }}>MAX</button>
               <span style={{ fontSize: "14px", color: "#8b949e", fontWeight: "600" }}>USDC</span>
             </div>
           </div>
         </div>
 
-        {/* --- LEVERAGE --- */}
+        {/* --- LEVERAGE SLIDER --- */}
         <div style={{ marginBottom: "24px" }}>
           <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "10px", fontSize: "12px" }}>
             <span style={{ color: "#8b949e" }}>Leverage</span>
             <span style={{ fontWeight: "600" }}>{leverage.toFixed(1)}x</span>
           </div>
           <input 
-            type="range" min="1.1" max="50" step="0.1" 
-            value={leverage} 
+            type="range" min="1.1" max="50" step="0.1" value={leverage} 
             onChange={(e) => setLeverage(parseFloat(e.target.value))}
             style={{ width: "100%", cursor: "pointer", accentColor: "#238636" }} 
           />
         </div>
 
-        {/* --- TRADE SUMMARY --- */}
-        <div style={{ 
-          backgroundColor: "#161b22", 
-          border: "1px solid #30363d", 
-          borderRadius: "8px", 
-          padding: "12px", 
-          marginBottom: "20px",
-          fontSize: "12px"
-        }}>
-          <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "8px" }}>
-            <span style={{ color: "#8b949e" }}>Entry Price</span>
-            <span style={{ color: "#e6edf3" }}>${currentPrice.toLocaleString()}</span>
-          </div>
+        {/* --- INFO SUMMARY --- */}
+        <div style={{ backgroundColor: "#161b22", border: "1px solid #30363d", borderRadius: "8px", padding: "12px", marginBottom: "20px", fontSize: "12px" }}>
           <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "8px" }}>
             <span style={{ color: "#8b949e" }}>Liq. Price</span>
-            <span style={{ color: "#da3633", fontWeight: "600" }}>
-              {collateralVal > 0 ? `$${liquidationPrice.toLocaleString(undefined, { maximumFractionDigits: 2 })}` : "-"}
-            </span>
+            <span style={{ color: "#da3633", fontWeight: "600" }}>{collateralVal > 0 ? `$${liquidationPrice.toLocaleString(undefined, { maximumFractionDigits: 2 })}` : "-"}</span>
           </div>
           <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "8px" }}>
-            <span style={{ color: "#8b949e", display: "flex", alignItems: "center", gap: "4px" }}>
-              Fees <Info size={10} />
-            </span>
-            <span style={{ color: "#e6edf3" }}>
-              {collateralVal > 0 ? `$${totalFees.toFixed(2)}` : "-"}
-            </span>
+            <span style={{ color: "#8b949e" }}>Est. Fees</span>
+            <span style={{ color: "#e6edf3" }}>{collateralVal > 0 ? `$${totalFees.toFixed(2)}` : "-"}</span>
           </div>
           <div style={{ borderTop: "1px solid #30363d", margin: "8px 0" }}></div>
           <div style={{ display: "flex", justifyContent: "space-between" }}>
-            <span style={{ color: "#8b949e" }}>Total Size</span>
-            <span style={{ color: "#e6edf3", fontWeight: "600" }}>
-              {collateralVal > 0 ? `$${positionSize.toLocaleString(undefined, { maximumFractionDigits: 2 })}` : "-"}
-            </span>
+            <span style={{ color: "#8b949e" }}>Total Size (USD)</span>
+            <span style={{ color: "#e6edf3", fontWeight: "600" }}>{collateralVal > 0 ? `$${positionSize.toLocaleString(undefined, { maximumFractionDigits: 2 })}` : "-"}</span>
           </div>
         </div>
 
-        {/* --- MAIN BUTTON --- */}
+        {/* --- STATUS MESSAGE --- */}
+        {statusMessage && (
+          <div style={{ 
+            marginBottom: "16px", padding: "10px", borderRadius: "6px", fontSize: "13px",
+            backgroundColor: statusMessage.type === 'success' ? "rgba(35, 134, 54, 0.2)" : "rgba(218, 54, 51, 0.2)",
+            color: statusMessage.type === 'success' ? "#3fb950" : "#f85149", border: `1px solid ${statusMessage.type === 'success' ? "#238636" : "#da3633"}`
+          }}>
+            {statusMessage.text}
+          </div>
+        )}
+
+        {/* --- OPEN ACTION BUTTON --- */}
         <button 
           disabled={isProcessing || collateralVal <= 0}
           style={{
             width: "100%", padding: "14px", borderRadius: "8px", border: "none", fontSize: "16px", fontWeight: "600",
             backgroundColor: side === "Long" ? "#238636" : "#da3633",
             color: "white", cursor: collateralVal > 0 ? "pointer" : "not-allowed", opacity: collateralVal > 0 ? 1 : 0.6,
-            display: "flex", justifyContent: "center", alignItems: "center", gap: "8px"
+            display: "flex", justifyContent: "center", alignItems: "center", gap: "8px", marginBottom: "12px"
           }}
         >
-          {isProcessing ? (
-            <> <RefreshCw className="animate-spin" size={18} /> Processing... </>
-          ) : (
-            `${side} ${asset}`
-          )}
+          {isProcessing ? <><RefreshCw className="animate-spin" size={18} /> Processing...</> : `Open ${side} ${asset}`}
         </button>
 
-        {/* Disclaimer */}
-        <p style={{ marginTop: "12px", fontSize: "11px", color: "#484f58", textAlign: "center" }}>
-           Entry price will be set upon confirmation.
-        </p>
-      </form>
+        {/* --- CLOSE POSITION BUTTON --- */}
+        <button 
+          type="button"
+          onClick={handleClosePosition}
+          disabled={isProcessing}
+          style={{
+            width: "100%", padding: "10px", borderRadius: "8px", border: "1px solid #30363d", fontSize: "14px", fontWeight: "600",
+            backgroundColor: "transparent", color: "#8b949e", cursor: "pointer", transition: "all 0.2s",
+            display: "flex", justifyContent: "center", alignItems: "center", gap: "8px"
+          }}
+          onMouseOver={(e) => { e.currentTarget.style.borderColor = "#da3633"; e.currentTarget.style.color = "#da3633"; }}
+          onMouseOut={(e) => { e.currentTarget.style.borderColor = "#30363d"; e.currentTarget.style.color = "#8b949e"; }}
+        >
+          <XCircle size={16} /> Close Open Position
+        </button>
 
-      {/* --- SUCCESS MODAL --- */}
-      {showModal && (
-        <div style={{
-          position: "fixed", inset: 0, backgroundColor: "rgba(0,0,0,0.8)", 
-          display: "flex", justifyContent: "center", alignItems: "center", zIndex: 50
-        }} onClick={() => setShowModal(false)}>
-          <div style={{ backgroundColor: "#161b22", border: "1px solid #30363d", padding: "30px", borderRadius: "12px", width: "400px", textAlign: "center" }} onClick={e => e.stopPropagation()}>
-            <div style={{ color: side === "Long" ? "#238636" : "#da3633", fontSize: "18px", fontWeight: "bold", marginBottom: "10px" }}>Position Opened!</div>
-            <p style={{ color: "#8b949e", marginBottom: "20px" }}>Your {side} position on {market} is live.</p>
-            <button onClick={() => setShowModal(false)} style={{ padding: "10px 20px", backgroundColor: "#30363d", color: "white", border: "none", borderRadius: "6px", cursor: "pointer" }}>Close</button>
-          </div>
-        </div>
-      )}
+      </form>
     </div>
   );
 }

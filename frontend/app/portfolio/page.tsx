@@ -33,7 +33,7 @@ export default function PortfolioPage() {
 
   const { data, isLoading } = useQuery({
     queryKey: ["portfolio", address],
-    queryFn: () => api<PortfolioData>(`/portfolio/${address}`),
+    queryFn: () => api<PortfolioData>(`/leaders/positions`),
     enabled: !!address,
   });
 
