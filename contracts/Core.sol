@@ -73,7 +73,7 @@ contract Core is Ownable, ReentrancyGuard {
     event Subscribed(uint256 indexed leaderId, address indexed follower, uint256 amount);
     event Unsubscribed(uint256 indexed leaderId, address indexed follower, uint256 amount);
 
-    event LeaderSignal(uint256 indexed leaderId, string action, uint256 sizeUsd, bool isLong, address indexToken);
+    event LeaderSignal(uint256 indexed leaderId, string action, uint256 sizeUsd, bool isLong, address indexToken, uint256 price);
     event FollowerMirrored(uint256 indexed leaderId, address indexed follower, string action, uint256 sizeUsd, bool isLong, uint256 entryPrice, address indexToken);
 
     event PositionClosed(uint256 indexed leaderId, address indexed follower);
@@ -126,7 +126,7 @@ contract Core is Ownable, ReentrancyGuard {
             indexToken: indexToken
         });
 
-        emit LeaderSignal(leaderId, "OPEN_LONG", sizeUsd, true, indexToken);
+        emit LeaderSignal(leaderId, "OPEN_LONG", sizeUsd, true, indexToken, price);
         _mirrorTrade(leaderId, "OPEN_LONG", sizeUsd, true, indexToken);
     }
 
@@ -142,7 +142,7 @@ contract Core is Ownable, ReentrancyGuard {
             indexToken: indexToken
         });
 
-        emit LeaderSignal(leaderId, "OPEN_SHORT", sizeUsd, false, indexToken);
+        emit LeaderSignal(leaderId, "OPEN_SHORT", sizeUsd, false, indexToken, price);
         _mirrorTrade(leaderId, "OPEN_SHORT", sizeUsd, false, indexToken);
     }
 
@@ -150,9 +150,10 @@ contract Core is Ownable, ReentrancyGuard {
     function leaderClose(uint256 leaderId) external onlyLeader(leaderId) nonReentrant {
         LeaderPosition storage lp = leaderPositions[leaderId];
         require(lp.isOpen, "leader no open pos");
+        uint256 price = _getPrice(lp.indexToken);
 
         lp.isOpen = false;
-        emit LeaderSignal(leaderId, "CLOSE", 0, false, lp.indexToken);
+        emit LeaderSignal(leaderId, "CLOSE", 0, false, lp.indexToken, price);
 
         _settleAndClose(leaderId);
     }

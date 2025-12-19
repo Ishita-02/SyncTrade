@@ -203,6 +203,12 @@
           "internalType": "address",
           "name": "indexToken",
           "type": "address"
+        },
+        {
+          "indexed": false,
+          "internalType": "uint256",
+          "name": "price",
+          "type": "uint256"
         }
       ],
       "name": "LeaderSignal",
