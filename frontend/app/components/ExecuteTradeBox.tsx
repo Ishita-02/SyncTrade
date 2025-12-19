@@ -101,21 +101,24 @@ const handleOpenPosition = async (e: React.FormEvent) => {
   };
 
   const handleClosePosition = async () => {
-    if (!confirm("Are you sure you want to close the current position for this strategy?")) return;
+    if (!confirm("Are you sure you want to close the current position?")) return;
 
-    setIsProcessing(true);
-    setStatusMessage(null);
+    setStatus("Please confirm close transaction in wallet...");
+    setIsProcessing(true); 
 
     try {
-      // Call Close API (Using api function directly)
-      await api(`/strategies/${leaderId}/close`, {
-        method: "POST",
+      writeContract({
+        address: CORE_CONTRACT,
+        abi: CORE_ABI as any,
+        functionName: "leaderClose",
+        args: [
+          BigInt(leaderId) 
+        ],
       });
       
-      setStatusMessage({ type: 'success', text: "Position closed successfully" });
     } catch (error: any) {
       console.error("Close Position Error:", error);
-      setStatusMessage({ type: 'error', text: error?.message || "Failed to close position" });
+      setStatus(`Failed to close: ${error.message}`);
     } finally {
       setIsProcessing(false);
     }

@@ -25,12 +25,12 @@ type LeaderDetail = {
 type Position = {
   id: number;
   market: string;
-  side: "Long" | "Short";
+  side: "OPEN_LONG" | "Short";
   collateral: string | number; // Handle both from API
   leverage: string | number;
   entryPrice: string | number;
   currentPrice: string | number;
-  pnl: string | number;
+  pnlUsd: string | number;
   pnlPercent: string | number;
   isOpen: boolean;
 };
@@ -55,12 +55,13 @@ export default function LeaderPage() {
     queryFn: () => api<Position[]>(`/leaders/${leaderId}/positions`),
   });
 
-   const { data: rawStats, isLoading: isStatsLoading } = useQuery({
-    queryKey: ["leader-positions", leaderId],
-    queryFn: () => api<Position[]>(`/leaders/${leaderId}/stats`),
-  });
+  //  const { data: rawStats, isLoading: isStatsLoading } = useQuery({
+  //   queryKey: ["leader-positions", leaderId],
+  //   queryFn: () => api<Position[]>(`/leaders/${leaderId}/stats`),
+  // });
 
-  console.log("data", rawStats)
+  // console.log("data", rawStats)
+  console.log("positions", rawPositions)
 
   // --- DATA PROCESSING ---
   // If backend returns raw numbers, we format them here for the UI
@@ -71,9 +72,9 @@ export default function LeaderPage() {
     entryPrice: Number(p.entryPrice).toLocaleString(),
     currentPrice: Number(p.currentPrice).toLocaleString(),
     // Add signs to PnL if missing
-    pnl: String(p.pnl).startsWith("-") || String(p.pnl).startsWith("+") 
-         ? p.pnl 
-         : Number(p.pnl) >= 0 ? `+${p.pnl}` : `${p.pnl}`,
+    pnl: String(p.pnlUsd).startsWith("-") || String(p.pnlUsd).startsWith("+") 
+         ? p.pnlUsd 
+         : Number(p.pnlUsd) >= 0 ? `+${p.pnlUsd}` : `${p.pnlUsd}`,
     pnlPercent: String(p.pnlPercent).includes("%") 
          ? p.pnlPercent 
          : `${Number(p.pnlPercent).toFixed(2)}%`
@@ -286,7 +287,7 @@ export default function LeaderPage() {
                       >
                         <td style={{ padding: "16px", color: "#e6edf3", fontWeight: "600" }}>{position.market}</td>
                         <td style={{ padding: "16px" }}>
-                          <span style={{ padding: "4px 10px", borderRadius: "6px", fontSize: "12px", fontWeight: "600", backgroundColor: position.side === "Long" ? "rgba(38, 166, 65, 0.1)" : "rgba(248, 81, 73, 0.1)", color: position.side === "Long" ? "#26a641" : "#f85149" }}>
+                          <span style={{ padding: "4px 10px", borderRadius: "6px", fontSize: "12px", fontWeight: "600", backgroundColor: position.side === "OPEN_LONG" ? "rgba(38, 166, 65, 0.1)" : "rgba(248, 81, 73, 0.1)", color: position.side === "OPEN_LONG" ? "#26a641" : "#f85149" }}>
                             {position.side}
                           </span>
                         </td>
