@@ -37,16 +37,9 @@ async function persistEvent(event: string, args: any, txHash?: string, blockNumb
         txHash: txHash ?? null,
         blockNumber: blockNumber ?? null,
 
-        // --- FIX 1: Use 'connect' for Leader ---
-        // This links the event to the Leader model safely using the unique leaderId
         leader: rawLeaderId ? {
           connect: { leaderId: rawLeaderId }
         } : undefined,
-
-        // --- FIX 2: Remove 'follower' assignment ---
-        // We cannot link the follower here because we only have an address string (args.follower),
-        // but the DB requires an internal Integer ID (followerId).
-        // Since 'args' (line 14) already contains the follower address, we don't lose data.
       },
     });
 
@@ -92,7 +85,7 @@ export const startIndexer = async () => {
             updatedAt: new Date(),
           },
           create: {
-            leaderId,
+            leaderId: leaderId,
             address: leaderAddr,
             meta,
             feeBps: 0,
@@ -323,16 +316,27 @@ export const startIndexer = async () => {
   // ---------------------------------------------------------
   watch({
     address: config.CORE_CONTRACT as `0x${string}`,
-    abi: parseAbi(['event LeaderSignal(uint256 leaderId, string action, uint256 sizeUsd, bool isLong, address indexToken)']),
+    abi: parseAbi(['event LeaderSignal(uint256 leaderId, string action, uint256 sizeUsd, bool isLong, address indexToken, uint256 price)']),
     eventName: "LeaderSignal",
     onLogs: async (logs) => {
       for (const l of logs) {
-        const args = l.args as any;
+        let args = l.args as any;
+        if (!args) {
+            console.log("⚠️ Args undefined, attempting manual decode...");
+            const decoded = decodeEventLog({
+              abi: coreABI,
+              data: l.data,
+              topics: l.topics,
+            });
+            args = decoded.args;
+            console.log(decoded)
+          }
         const leaderId = Number(args.leaderId);
         const action = args.action; // "OPEN_LONG", "OPEN_SHORT", "CLOSE"
         const sizeUsd = args.sizeUsd.toString();
         const isLong = Boolean(args.isLong);
         const indexToken = args.indexToken;
+        const price = Number(args.price);
 
         console.log(`🔔 Leader Signal: #${leaderId} - ${action}`);
 
@@ -340,18 +344,13 @@ export const startIndexer = async () => {
         if (action === "OPEN_LONG" || action === "OPEN_SHORT") {
           await prisma.position.create({
             data: {
-              leaderId: leaderId,
-              // IMPORTANT: Follower is NULL because this is the Leader's own position
-              follower: null, 
-              // We connect the Leader relation
-              leader: { connect: { leaderId: leaderId } },
-              
+              leader: { connect: { leaderId: leaderId } },              
               action: action,
               isLong: isLong,
               sizeUsd: sizeUsd,
               isOpen: true,
               indexToken: indexToken,
-              entryPrice: "0", // Event doesn't emit price, you might need to fetch it or leave 0
+              entryPrice: price, // Event doesn't emit price, you might need to fetch it or leave 0
               txHash: safeHash(l.transactionHash),
               timestamp: new Date(),
             } as any,
@@ -360,7 +359,6 @@ export const startIndexer = async () => {
         
         // CASE 2: Leader CLOSES a position
         else if (action === "CLOSE") {
-          // Find the Leader's specific open position (where follower is null)
           const openPos = await prisma.position.findFirst({
             where: {
               leaderId: leaderId,
@@ -375,7 +373,7 @@ export const startIndexer = async () => {
               where: { id: openPos.id },
               data: {
                 isOpen: false,
-                // You might want to update exitPrice here if you fetch it
+                exitPrice: price
               } as any
             });
           }

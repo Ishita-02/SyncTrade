@@ -12,9 +12,10 @@ export const startServer = async () => {
   const app = Fastify({ logger: true });
 
   await app.register(cors, {
-    origin: "http://localhost:3000",
-    methods: ["GET", "POST", "PUT", "DELETE"],
-    allowedHeaders: ["Content-Type", "Authorization"],
+    origin: true,
+    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allowedHeaders: "*",
+    credentials: true,
   });
 
   // Register routes
