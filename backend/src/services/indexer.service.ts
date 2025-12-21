@@ -9,6 +9,7 @@ import prisma from "../db/prisma.js";
 import {coreABI} from "../abi/core.js";
 import { config } from "../config.js";
 import { parseAbi, decodeEventLog } from 'viem'
+import { Prisma } from "@prisma/client";
 
 const safeHash = (hash: `0x${string}` | null | undefined): string | undefined =>
   hash ? String(hash) : undefined;
@@ -107,7 +108,17 @@ export const startIndexer = async () => {
     eventName: 'Subscribed',
     onLogs: async (logs) => {
       for (const l of logs) {
-        const args = l.args as any;
+        let args = l.args as any;
+        if (!args) {
+            console.log("⚠️ Args undefined, attempting manual decode...");
+            const decoded = decodeEventLog({
+              abi: coreABI,
+              data: l.data,
+              topics: l.topics,
+            });
+            args = decoded.args;
+            console.log(decoded)
+          }
         const leaderId = Number(args.leaderId);
         const followerAddr = args.follower;
         const amount = args.amount?.toString?.() ?? String(args.amount);
@@ -154,31 +165,49 @@ export const startIndexer = async () => {
 
   // Unsubscribed
   watch({
-    address: config.CORE_CONTRACT as `0x${string}`,
-    abi: parseAbi(['event Unsubscribed(uint256 leaderId, address follower, uint256 amount)']),
-    eventName: "Unsubscribed",
-    onLogs: async (logs) => {
-      for (const l of logs) {
-        const args = l.args;
-        const leaderId = Number(args.leaderId);
-        const followerAddr = args.follower;
-        const amount = args.amount?.toString?.() ?? String(args.amount);
-
-        // set deposit = 0
-        await prisma.follower.updateMany({
-          where: { leaderId, address: followerAddr },
-          data: { deposit: "0", updatedAt: new Date() } as any,
+  address: config.CORE_CONTRACT as `0x${string}`,
+  abi: parseAbi(['event Unsubscribed(uint256 leaderId, address follower, uint256 amount)']),
+  eventName: "Unsubscribed",
+  onLogs: async (logs) => {
+    for (const l of logs) {
+      let args = l.args as any;
+      if (!args) {
+        console.log("⚠️ Args undefined, attempting manual decode...");
+        const decoded = decodeEventLog({
+          abi: coreABI,
+          data: l.data,
+          topics: l.topics,
         });
-
-        await prisma.leader.updateMany({
-          where: { leaderId },
-          data: { totalDeposits: { decrement: amount } as any, totalFollowers: { decrement: 1 } as any },
-        });
-
-        await persistEvent("Unsubscribed", args, safeHash(l.transactionHash), safeBlock(l.blockNumber));
+        args = decoded.args;
       }
-    },
-  });
+      
+      const leaderId = Number(args.leaderId);
+      const followerAddr = args.follower;
+      const amount = args.amount?.toString?.() ?? String(args.amount);
+
+      try {
+        await prisma.leader.update({
+          where: { leaderId: leaderId }, 
+          data: {
+            totalDeposits: { decrement: amount },
+            totalFollowers: { decrement: 1 },
+            
+            followers: {
+              deleteMany: {
+                address: followerAddr
+              }
+            }
+          },
+        });
+      } catch (error) {
+        console.error(`Failed to unsubscribe follower ${followerAddr} from leader ${leaderId}:`, error);
+      }
+      // --- END OF UPDATE ---
+
+      await persistEvent("Unsubscribed", args, safeHash(l.transactionHash), safeBlock(l.blockNumber));
+    }
+  },
+});
 
   // FollowerMirrored: create position record
   watch({
@@ -188,24 +217,49 @@ export const startIndexer = async () => {
     strict: true,
     onLogs: async (logs) => {
       for (const l of logs) {
-        const a = l.args ;
+        let args = l.args as any;
+        if (!args || Object.keys(args).length === 0) {
+            console.log("⚠️ a undefined, attempting manual decode...");
+            const decoded = decodeEventLog({
+              abi: coreABI,
+              data: l.data,
+              topics: l.topics,
+            });
+            args = decoded.args;
+            console.log(args)
+          }
+          const followerAddress = args.follower.toLowerCase() ;
+           const follower = await prisma.follower.upsert({
+            where: { leaderId_address: { leaderId: Number(args.leaderId), address: followerAddress } },
+            update: {},
+            create: { leaderId: Number(args.leaderId), address: followerAddress, deposit: "0" }
+          });
+ 
+
+          const entryPrice = new Prisma.Decimal(
+              args.entryPrice.toString()
+            ).div("1e18");
+
+            const sizeUsd = new Prisma.Decimal(
+              args.sizeUsd.toString()
+            ).div("1e18");
         // create a Position row for follower
         await prisma.position.create({
           data: {
-            leaderId: Number(a.leaderId),
-            follower: a.follower,
-            action: a.action,
-            isLong: Boolean(a.isLong),
-            entryPrice: a.entryPrice.toString(),
-            sizeUsd: a.sizeUsd.toString(),
+            leaderId: Number(args.leaderId),
+            followerId: follower.id,
+            action: args.action,
+            isLong: Boolean(args.isLong),
+            entryPrice: entryPrice,
+            sizeUsd: sizeUsd,
             isOpen: true,
-            indexToken: a.indexToken,
+            indexToken: args.indexToken,
             txHash: safeHash(l.transactionHash) ?? undefined,
             timestamp: new Date(),
           } as any,
         });
 
-        await persistEvent("FollowerMirrored", a, safeHash(l.transactionHash), safeBlock(l.blockNumber));
+        await persistEvent("FollowerMirrored", args, safeHash(l.transactionHash), safeBlock(l.blockNumber));
       }
     },
   });
@@ -217,9 +271,19 @@ export const startIndexer = async () => {
     eventName: "FollowerPnLSettled",
     onLogs: async (logs) => {
       for (const l of logs) {
-        const a = l.args as any;
-        const leaderId = Number(a.leaderId);
-        const followerAddr = a.follower;
+        let args = l.args as any;
+        if (!args) {
+            console.log("⚠️ Args undefined, attempting manual decode...");
+            const decoded = decodeEventLog({
+              abi: coreABI,
+              data: l.data,
+              topics: l.topics,
+            });
+            args = decoded.args;
+            console.log(args)
+          }
+        const leaderId = Number(args.leaderId);
+        const followerAddr = args.follower;
 
         // Find latest open position for follower
         const pos = await prisma.position.findFirst({
@@ -231,7 +295,7 @@ export const startIndexer = async () => {
           await prisma.position.update({
             where: { id: pos.id },
             data: {
-              pnlUsd: a.pnlUsd.toString(),
+              pnlUsd: args.pnlUsd.toString(),
               isOpen: false,
               exitPrice: pos.entryPrice, // we didn't emit exitPrice; keep entry if unknown
             } as any,
@@ -255,7 +319,7 @@ export const startIndexer = async () => {
           console.warn("Failed to read deposits on-chain:", err);
         }
 
-        await persistEvent("FollowerPnLSettled", a, safeHash(l.transactionHash), safeBlock(l.blockNumber));
+        await persistEvent("FollowerPnLSettled", args, safeHash(l.transactionHash), safeBlock(l.blockNumber));
       }
     },
   });
@@ -267,15 +331,25 @@ export const startIndexer = async () => {
     eventName: "LeaderFeesAccrued",
     onLogs: async (logs) => {
       for (const l of logs) {
-        const a = l.args as any;
-        const leaderId = Number(a.leaderId);
-        const amount = a.amount?.toString?.() ?? String(a.amount);
+        let args = l.args as any;
+        if (!args) {
+            console.log("⚠️ Args undefined, attempting manual decode...");
+            const decoded = decodeEventLog({
+              abi: coreABI,
+              data: l.data,
+              topics: l.topics,
+            });
+            args = decoded.args as any;
+            console.log(args)
+          }
+        const leaderId = Number(args.leaderId);
+        const amount = args.amount?.toString?.() ?? String(args.amount);
         // increment feesAccrued
         await prisma.leader.updateMany({
           where: { leaderId },
           data: { feesAccrued: { increment: amount } as any },
         });
-        await persistEvent("LeaderFeesAccrued", a, safeHash(l.transactionHash), safeBlock(l.blockNumber));
+        await persistEvent("LeaderFeesAccrued", args, safeHash(l.transactionHash), safeBlock(l.blockNumber));
       }
     },
   });
@@ -287,14 +361,24 @@ export const startIndexer = async () => {
     eventName: "LeaderWithdraw",
     onLogs: async (logs) => {
       for (const l of logs) {
-        const a = l.args as any;
-        const leaderId = Number(a.leaderId);
-        const amount = a.amount?.toString?.() ?? String(a.amount);
+        let args = l.args as any;
+        if (!args) {
+            console.log("⚠️ Args undefined, attempting manual decode...");
+            const decoded = decodeEventLog({
+              abi: coreABI,
+              data: l.data,
+              topics: l.topics,
+            });
+            args = decoded.args;
+            console.log(args)
+          }
+        const leaderId = Number(args.leaderId);
+        const amount = args.amount?.toString?.() ?? String(args.amount);
         await prisma.leader.updateMany({
           where: { leaderId },
           data: { feesAccrued: { decrement: amount } as any },
         });
-        await persistEvent("LeaderWithdraw", a, safeHash(l.transactionHash), safeBlock(l.blockNumber));
+        await persistEvent("LeaderWithdraw", args, safeHash(l.transactionHash), safeBlock(l.blockNumber));
       }
     },
   });

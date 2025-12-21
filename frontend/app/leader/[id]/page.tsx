@@ -1,16 +1,18 @@
 "use client";
 
 import { useParams } from "next/navigation";
-import { useAccount } from "wagmi";
+import { useAccount, useWriteContract, useWaitForTransactionReceipt } from "wagmi";
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { ConnectButton } from "@rainbow-me/rainbowkit";
 import { ArrowLeft, User, TrendingUp, DollarSign, Activity, MousePointerClick } from "lucide-react";
 import { useQuery } from "@tanstack/react-query"; // IMPORT THIS
 import { api } from "@/lib/api"; // Ensure this path is correct
-
+import toast from "react-hot-toast";
 import SubscribeBox from "../../components/SubscribeBox";
 import CandlestickChart from "../../components/CandleStickChart";
+import { CORE_ABI, CORE_CONTRACT, ERC20_ABI } from "@/lib/contracts";
+
 
 // --- TYPES ---
 type LeaderDetail = {
@@ -60,6 +62,46 @@ export default function LeaderPage() {
   //   queryFn: () => api<Position[]>(`/leaders/${leaderId}/stats`),
   // });
 
+  const { data: subscription } = useQuery({
+    queryKey: ["subscription", leaderId, address],
+    enabled: !!address,
+    queryFn: () =>
+      api<{
+        subscribed: boolean;
+        deposit: string;
+      }>(`/leaders/${leaderId}/subscription/${address}`),
+  });
+
+
+    const { writeContract, data: hash, isPending, error: writeError } = useWriteContract();
+      
+    const { isLoading: isConfirming, isSuccess } = useWaitForTransactionReceipt({ 
+      hash 
+    });
+
+  const handleUnsubscribe = async () => {
+    try {
+      toast.loading("Unsubscribing...", { id: "unsub" });
+
+      writeContract({
+        address: CORE_CONTRACT,
+        abi: CORE_ABI,
+        functionName: "unsubscribe",
+        args: [leaderId],
+      });
+
+      toast.success("Unsubscribed", { id: "unsub" });
+
+      // refresh UI
+      // useQueryClient.invalidateQueries({ queryKey: ["subscription"] });
+      // queryClient.invalidateQueries({ queryKey: ["leader", leaderId] });
+    } catch (e) {
+      console.error(e);
+      toast.error("Unsubscribe failed", { id: "unsub" });
+    }
+  };
+
+
   // console.log("data", rawStats)
   console.log("positions", rawPositions)
 
@@ -69,7 +111,7 @@ export default function LeaderPage() {
     ...p,
     collateral: Number(p.collateral).toLocaleString(),
     leverage: typeof p.leverage === 'number' ? `${p.leverage}x` : p.leverage,
-    entryPrice: Number(p.entryPrice).toLocaleString(),
+    entryPrice: (Number(p.entryPrice )/1e18).toLocaleString(),
     currentPrice: Number(p.currentPrice).toLocaleString(),
     // Add signs to PnL if missing
     pnl: String(p.pnlUsd).startsWith("-") || String(p.pnlUsd).startsWith("+") 
@@ -213,17 +255,55 @@ export default function LeaderPage() {
             <CandlestickChart symbol={selectedMarket} />
           </div>
 
-          {/* Right: Subscribe Box */}
-          <div style={{ display: "flex", flexDirection: "column", gap: "24px" }}>
-            <div style={{ backgroundColor: "#161b22", border: "1px solid #30363d", borderRadius: "12px", padding: "24px" }}>
-              <h3 style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "18px", fontWeight: 600, marginBottom: "16px" }}>
-                <Activity size={18} />
-                Subscribe to Strategy
-              </h3>
+          <div style={{ backgroundColor: "#161b22", border: "1px solid #30363d", borderRadius: "12px", padding: "24px" }}>
+            <h3
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: "8px",
+                fontSize: "18px",
+                fontWeight: 600,
+                marginBottom: "16px",
+              }}
+            >
+              <Activity size={18} />
+              {subscription?.subscribed ? "Your Subscription" : "Subscribe to Strategy"}
+            </h3>
+
+            {/* {!isConnected && (
+              <div style={{ color: "#8b949e", fontSize: "14px" }}>
+                Connect wallet to subscribe
+              </div>
+            )} */}
+
+            { subscription?.subscribed ? (
+              <>
+                <div style={{ marginBottom: "12px", color: "#8b949e", fontSize: "14px" }}>
+                  Deposited: $
+                  {(Number(subscription.deposit) / 1e6).toFixed(2)} USDC
+                </div>
+
+                <button
+                  onClick={handleUnsubscribe}
+                  style={{
+                    width: "100%",
+                    backgroundColor: "#f85149",
+                    color: "#ffffff",
+                    padding: "12px",
+                    borderRadius: "8px",
+                    border: "none",
+                    fontWeight: "600",
+                    cursor: "pointer",
+                  }}
+                >
+                  Unsubscribe
+                </button>
+              </>
+            ) : (
               <SubscribeBox leaderId={leaderId} />
-            </div>
+            )}
           </div>
-        </div>
+
 
         {/* Portfolio Positions Table */}
         <div style={{ backgroundColor: "#161b22", border: "1px solid #30363d", borderRadius: "12px", padding: "24px" }}>
@@ -315,6 +395,7 @@ export default function LeaderPage() {
           </div>
         </div>
       </div>
+    </div>
     </div>
   );
 }

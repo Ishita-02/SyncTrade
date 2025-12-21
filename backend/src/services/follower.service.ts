@@ -11,3 +11,19 @@ export const getFollowersForLeader = async (leaderId: number) => {
 export const getFollower = async (leaderId: number, address: string) => {
   return prisma.follower.findUnique({ where: { leaderId_address: { leaderId, address } as any } });
 };
+
+export const isSubscribed = async(leaderId: number, address: string) => {
+    const follower = await prisma.follower.findUnique({
+      where: {
+        leaderId_address: {
+          leaderId,
+          address: address.toLowerCase(),
+        },
+      },
+    });
+
+    return {
+      subscribed: Boolean(follower),
+      deposit: follower?.deposit?.toString() ?? "0",
+    };
+  };

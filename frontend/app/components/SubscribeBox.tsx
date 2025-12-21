@@ -2,8 +2,14 @@
 
 import { useState } from "react";
 import { X, Info, AlertCircle } from "lucide-react";
+import { api } from "@/lib/api";
+import { useAccount, useWriteContract, useWaitForTransactionReceipt } from "wagmi";
+import toast from "react-hot-toast";
+import { CORE_ABI, CORE_CONTRACT, ERC20_ABI } from "@/lib/contracts";
+import { useQuery } from "@tanstack/react-query"; // IMPORT THIS
 
 export default function SubscribeBox({ leaderId }: { leaderId: number }) {
+  const { address } = useAccount();
   const [amount, setAmount] = useState("");
   const [showModal, setShowModal] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -14,30 +20,92 @@ export default function SubscribeBox({ leaderId }: { leaderId: number }) {
   const platformFeeAmount = depositAmount * (platformFee / 100);
   const netDeposit = depositAmount - platformFeeAmount;
 
-  const handleSubscribe = async (e: React.FormEvent) => {
+  const { writeContract, data: hash, isPending, error: writeError } = useWriteContract();
+    
+  const { isLoading: isConfirming, isSuccess } = useWaitForTransactionReceipt({ 
+    hash 
+  });
+
+    const handleSubscribe = async (e: React.FormEvent) => {
     e.preventDefault();
-    e.stopPropagation();
 
     if (!amount || Number(amount) <= 0) {
-      alert("Please enter a valid amount");
+      toast.error("Enter a valid amount");
       return;
     }
 
-    setIsProcessing(true);
+    try {
+      setIsProcessing(true);
 
-    // TODO: Call your smart contract subscribe function
-    // const tx = await contract.subscribe(leaderId, amount);
+      toast.loading("Submitting subscription...", { id: "subscribe" });
+      await writeContract({
+        address: "0x5fbdb2315678afecb367f032d93f642f64180aa3",
+        abi: ERC20_ABI,
+        functionName: "approve",
+        args: [CORE_CONTRACT, amount],
+      });
 
-    setTimeout(() => {
-      setShowModal(true);
+      const txHash = writeContract({
+        address: CORE_CONTRACT,
+        abi: CORE_ABI,
+        functionName: "subscribe",
+        args: [leaderId, BigInt(Number(amount))],
+      });
+
+      toast.success("Subscription submitted", { id: "subscribe" });
+
+      console.log("Tx:", txHash);
+
+      // OPTIONAL: trigger refetch after delay
+      setTimeout(() => {
+        // queryClient.invalidateQueries(["leader", leaderId]);
+      }, 3000);
+
+      setAmount("");
+    } catch (err: any) {
+      console.error(err);
+      toast.error("Subscription failed", { id: "subscribe" });
+    } finally {
       setIsProcessing(false);
-    }, 1000);
+    }
   };
+
+//   const handleUnsubscribe = async () => {
+//   try {
+//     toast.loading("Unsubscribing...", { id: "unsub" });
+
+//     writeContract({
+//       address: CORE_CONTRACT,
+//       abi: CORE_ABI,
+//       functionName: "unsubscribe",
+//       args: [leaderId],
+//     });
+
+//     toast.success("Unsubscribed", { id: "unsub" });
+
+//     // refresh UI
+//     // useQueryClient.invalidateQueries({ queryKey: ["subscription"] });
+//     // queryClient.invalidateQueries({ queryKey: ["leader", leaderId] });
+//   } catch (e) {
+//     console.error(e);
+//     toast.error("Unsubscribe failed", { id: "unsub" });
+//   }
+// };
 
   const closeModal = () => {
     setShowModal(false);
     setAmount("");
   };
+
+  const { data: subscription } = useQuery({
+    queryKey: ["subscription", leaderId, address],
+    enabled: !!address,
+    queryFn: () =>
+      api<{
+        subscribed: boolean;
+        deposit: string;
+      }>(`/leaders/${leaderId}/subscription/${address}`),
+  });
 
   return (
     <>
