@@ -1,8 +1,9 @@
 "use client";
 
 import { useAccount } from "wagmi";
+import { useParams } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
-import { api } from "../../lib/api";
+import { api } from "../../../lib/api";
 import { Wallet, TrendingUp, DollarSign, Activity, ExternalLink } from "lucide-react";
 import Link from "next/link";
 import { ConnectButton } from "@rainbow-me/rainbowkit";
@@ -18,7 +19,7 @@ type Position = {
   sizeUsd: string;
   pnlUsd?: string;
   isOpen: boolean;
-  indexToken: string; // "0x..." address
+  indexToken: string; 
   txHash: string;
   timestamp: string;
 };
@@ -28,7 +29,6 @@ const TOKEN_MAP: Record<string, string> = {
   [process.env.NEXT_PUBLIC_WETH?.toLowerCase() || ""]: "ETH",
   [process.env.NEXT_PUBLIC_WBTC?.toLowerCase() || ""]: "BTC",
   [process.env.NEXT_PUBLIC_USDC?.toLowerCase() || ""]: "USDC",
-  // Fallback for hardcoded address in your example data
   "0xe7f1725e7734ce288f8367e1bb143e90bb3f0512": "ETH", 
 };
 
@@ -49,12 +49,14 @@ function formatUsd(value: string | undefined | null) {
 }
 
 export default function PortfolioPage() {
+  const { id } = useParams();
+  const leaderId = Number(id);
   const { address } = useAccount();
 
   // Fetch Data
   const { data, isLoading } = useQuery({
     queryKey: ["portfolio", address],
-    queryFn: () => api<Position[]>(`/leaders/1/positions`), 
+    queryFn: () => api<Position[]>(`/leaders/${leaderId}/followers/${address}/positions`), 
     enabled: !!address,
   });
 

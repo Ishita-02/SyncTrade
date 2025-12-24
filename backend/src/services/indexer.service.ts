@@ -384,23 +384,20 @@ export const startIndexer = async () => {
   });
 
   // PositionClosed (generic)
-  watch({
-    address: config.CORE_CONTRACT as `0x${string}`,
-    abi: parseAbi(['event PositionClosed(uint256 leaderId, address follower)']),
-    eventName: "PositionClosed",
-    onLogs: async (logs) => {
-      for (const l of logs) {
-        await persistEvent("PositionClosed", l.args, safeHash(l.transactionHash), safeBlock(l.blockNumber));
-      }
-    },
-  });
+  // watch({
+  //   address: config.CORE_CONTRACT as `0x${string}`,
+  //   abi: parseAbi(['event PositionClosed(uint256 leaderId, address follower)']),
+  //   eventName: "PositionClosed",
+  //   onLogs: async (logs) => {
+  //     for (const l of logs) {
+  //       await persistEvent("PositionClosed", l.args, safeHash(l.transactionHash), safeBlock(l.blockNumber));
+  //     }
+  //   },
+  // });
 
-  // ---------------------------------------------------------
-  // MISSING HANDLER: LeaderSignal (Tracks Leader's Own Position)
-  // ---------------------------------------------------------
   watch({
     address: config.CORE_CONTRACT as `0x${string}`,
-    abi: parseAbi(['event LeaderSignal(uint256 leaderId, string action, uint256 sizeUsd, bool isLong, address indexToken, uint256 price)']),
+    abi: parseAbi(['event LeaderSignal(uint256 leaderId, string action, uint256 sizeUsd, bool isLong, address indexToken, uint256 entryPrice)']),
     eventName: "LeaderSignal",
     onLogs: async (logs) => {
       for (const l of logs) {
@@ -420,7 +417,7 @@ export const startIndexer = async () => {
         const sizeUsd = args.sizeUsd.toString();
         const isLong = Boolean(args.isLong);
         const indexToken = args.indexToken;
-        const price = Number(args.price);
+        const price = Number(args.entryPrice);
 
         console.log(`🔔 Leader Signal: #${leaderId} - ${action}`);
 

@@ -26,3 +26,30 @@ export async function api<T>(
 
   return res.json();
 }
+
+export const MARKET_MAP: Record<
+  string,
+  {
+    symbol: string;
+    market: string;
+  }
+> = {
+  [process.env.NEXT_PUBLIC_WETH!.toLowerCase()]: {
+    symbol: "ETH",
+    market: "ETH-USD",
+  },
+  [process.env.NEXT_PUBLIC_WBTC!.toLowerCase()]: {
+    symbol: "BTC",
+    market: "BTC-USD",
+  },
+  [process.env.NEXT_PUBLIC_USDC!.toLowerCase()]: {
+    symbol: "USDC",
+    market: "USDC-USD",
+  },
+
+  // hardhat fallback
+  "0xe7f1725e7734ce288f8367e1bb143e90bb3f0512": {
+    symbol: "ETH",
+    market: "ETH-USD",
+  },
+};
