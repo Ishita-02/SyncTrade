@@ -35,6 +35,7 @@ type Strategy = {
   id: number;
   name: string;
   leaderId: number;
+  meta: string;
 };
 
 // Update these with the addresses from your deployment log
@@ -94,14 +95,14 @@ export default function PortfolioPage() {
   // Fetch user's strategies (as a leader)
   const { data: strategies } = useQuery({
     queryKey: ["user-strategies", address],
-    queryFn: () => api<Strategy[]>(`/users/${address}/strategies`),
+    queryFn: () => api<Strategy[]>(`/strategies/me/${address}`),
     enabled: !!address && viewMode === "leader",
   });
 
   // Fetch leaders the user is following
   const { data: followedLeaders } = useQuery({
     queryKey: ["followed-leaders", address],
-    queryFn: () => api<Leader[]>(`/users/${address}/following`),
+    queryFn: () => api<Leader[]>(`/getLeaders/follower/${address}`),
     enabled: !!address && viewMode === "follower",
   });
 
@@ -111,7 +112,7 @@ export default function PortfolioPage() {
       let positions = leaderPositions || [];
       if (selectedStrategyId) {
         // Filter by strategy if your Position type includes strategyId
-        // positions = positions.filter(p => p.strategyId === selectedStrategyId);
+        positions = positions.filter(p => p.leaderId === selectedStrategyId);
         return positions;
       }
       return positions;
@@ -124,7 +125,7 @@ export default function PortfolioPage() {
     }
   };
 
-  const positions = getCurrentPositions();
+  const positions = getCurrentPositions() || [];
   const isLoading = viewMode === "leader" ? leaderLoading : followerLoading;
 
   // Calculate Stats
@@ -270,8 +271,8 @@ export default function PortfolioPage() {
                 >
                   <option value="">All Strategies</option>
                   {(strategies || []).map((strategy) => (
-                    <option key={strategy.id} value={strategy.id}>
-                      {strategy.name}
+                    <option key={strategy.leaderId} value={strategy.leaderId}>
+                      {strategy.meta}
                     </option>
                   ))}
                 </select>

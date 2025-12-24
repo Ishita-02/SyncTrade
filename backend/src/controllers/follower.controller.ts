@@ -1,4 +1,4 @@
-import { getFollowersForLeader, getFollower, isSubscribed } from "../services/follower.service.js";
+import { getFollowersForLeader, getFollower, isSubscribed, getLeaders } from "../services/follower.service.js";
 import { FastifyRequest, FastifyReply } from "fastify";
 import prisma from "../db/prisma";
 
@@ -91,3 +91,12 @@ export const checkSubscription = async (
 
   reply.send(result);
 };
+
+export const getLeadersUserFollowed = async(
+  req: any,
+  reply: FastifyReply
+) => {
+  const address = req.params.address as string;
+  const leaders = await getLeaders(address);
+  return reply.send(leaders);
+}

@@ -27,3 +27,7 @@ export const isSubscribed = async(leaderId: number, address: string) => {
       deposit: follower?.deposit?.toString() ?? "0",
     };
   };
+
+export const getLeaders = async (address: string) => {
+  return prisma.follower.findMany({ where: { address }, orderBy: { updatedAt: "desc" } });
+};

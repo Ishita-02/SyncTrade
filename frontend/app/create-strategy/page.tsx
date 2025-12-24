@@ -8,7 +8,7 @@ import { decodeEventLog } from "viem"; // Import this to parse logs
 import { ArrowLeft } from "lucide-react";
 import coreABI from "../../abi/Core.json"; 
 
-const CONTRACT_ADDRESS = "0x610178da211fef7d417bc0e6fed39f05609ad788";
+const CONTRACT_ADDRESS = "0xcf7ed3acca5a467e9e704c703e8d87f634fb0fc9";
 
 export default function CreateStrategyPage() {
   const router = useRouter();

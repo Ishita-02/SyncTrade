@@ -12,7 +12,8 @@ import toast from "react-hot-toast";
 import SubscribeBox from "../../components/SubscribeBox";
 import CandlestickChart from "../../components/CandleStickChart";
 import { CORE_ABI, CORE_CONTRACT, ERC20_ABI } from "@/lib/contracts";
-
+import { MARKET_MAP } from "@/lib/api";
+import { usePrices } from "@/app/hooks/usePrices";
 
 // --- TYPES ---
 type LeaderDetail = {
@@ -26,21 +27,24 @@ type LeaderDetail = {
 
 type Position = {
   id: number;
-  market: string;
+  indexToken: string;
   side: "OPEN_LONG" | "Short";
-  collateral: string | number; // Handle both from API
+  collateral: string | number; 
   leverage: string | number;
   entryPrice: string | number;
   currentPrice: string | number;
   pnlUsd: string | number;
   pnlPercent: string | number;
   isOpen: boolean;
+  isLong: boolean;
+  sizeUsd: string
 };
 
 export default function LeaderPage() {
   const { id } = useParams();
   const leaderId = Number(id);
   const { address } = useAccount();
+  const { prices } = usePrices();
 
   const [marketFilter, setMarketFilter] = useState("All");
   const [selectedMarket, setSelectedMarket] = useState("ETH-USD");
@@ -101,26 +105,58 @@ export default function LeaderPage() {
     }
   };
 
-
   // console.log("data", rawStats)
   console.log("positions", rawPositions)
 
-  // --- DATA PROCESSING ---
-  // If backend returns raw numbers, we format them here for the UI
-  const allPositions = (rawPositions || []).map((p) => ({
-    ...p,
-    collateral: Number(p.collateral).toLocaleString(),
-    leverage: typeof p.leverage === 'number' ? `${p.leverage}x` : p.leverage,
-    entryPrice: (Number(p.entryPrice )/1e18).toLocaleString(),
-    currentPrice: Number(p.currentPrice).toLocaleString(),
-    // Add signs to PnL if missing
-    pnl: String(p.pnlUsd).startsWith("-") || String(p.pnlUsd).startsWith("+") 
-         ? p.pnlUsd 
-         : Number(p.pnlUsd) >= 0 ? `+${p.pnlUsd}` : `${p.pnlUsd}`,
-    pnlPercent: String(p.pnlPercent).includes("%") 
-         ? p.pnlPercent 
-         : `${Number(p.pnlPercent).toFixed(2)}%`
-  }));
+  const allPositions = (rawPositions || []).map((p) => {
+    const tokenKey = p.indexToken.toLowerCase();
+    const marketInfo = MARKET_MAP[tokenKey];
+
+    const entryPrice = Number(p.entryPrice) / 1e18;
+    const sizeUsd = Number(p.sizeUsd) / 1e18;
+
+    const symbol = MARKET_MAP[p.indexToken.toLowerCase()];
+    const currentPrice = (prices && symbol?.symbol && (prices as Record<string, any>)[symbol.symbol]?.price) ?? 0;
+
+    let pnlUsd = 0;
+    let pnlPercent = 0;
+
+    if (currentPrice && entryPrice > 0) {
+      pnlUsd = p.isLong
+        ? ((currentPrice - entryPrice) * sizeUsd) / entryPrice
+        : ((entryPrice - currentPrice) * sizeUsd) / entryPrice;
+
+      pnlPercent = (pnlUsd / sizeUsd) * 100;
+    }
+
+    // const leverage =
+    // followerCollateralUsd > 0
+    //   ? sizeUsd / followerCollateralUsd
+    //   : 0
+
+
+    return {
+      id: p.id,
+      market: marketInfo?.market ?? "UNKNOWN",
+      isLong: p.isLong,
+      collateral: sizeUsd / ( 1),
+      leverage: 1,
+      entryPrice,
+      currentPrice,
+      pnlUsd,
+      pnlPercent,
+      isOpen: p.isOpen,
+    };
+  });
+
+   var totalPnlUsd = allPositions
+    .filter((p) => p.isOpen)
+    .reduce((acc, p) => acc + p.pnlUsd, 0);
+
+    var totalAmount = allPositions
+    .filter((p) => p.isOpen)
+    .reduce((acc, p) => acc + p.collateral, 0);
+
 
   const filteredPositions =
     marketFilter === "All"
@@ -195,7 +231,7 @@ export default function LeaderPage() {
               </div>
               <div>
                 <div style={{ color: "#8b949e", fontSize: "12px", marginBottom: "2px" }}>Total AUM</div>
-                <div style={{ color: "#e6edf3", fontSize: "20px", fontWeight: "700" }}>${Number(leader.totalAUM).toLocaleString()}</div>
+                <div style={{ color: "#e6edf3", fontSize: "20px", fontWeight: "700" }}>${Number(totalAmount.toLocaleString())}</div>
               </div>
             </div>
           </div>
@@ -209,7 +245,7 @@ export default function LeaderPage() {
               <div>
                 <div style={{ color: "#8b949e", fontSize: "12px", marginBottom: "2px" }}>Total P&L</div>
                 <div style={{ color: "#26a641", fontSize: "20px", fontWeight: "700" }}>
-                   {Number(leader.totalPnL) > 0 ? "+" : ""}${Number(leader.totalPnL).toLocaleString()}
+                   {totalPnlUsd > 0 ? "+" : ""}${(totalPnlUsd).toLocaleString()}
                 </div>
               </div>
             </div>
@@ -343,54 +379,109 @@ export default function LeaderPage() {
                 </tr>
               </thead>
               <tbody>
-                {filteredPositions.length === 0 ? (
-                  <tr>
-                    <td colSpan={8} style={{ padding: "32px", textAlign: "center", color: "#8b949e" }}>
-                      No positions found for this strategy.
-                    </td>
-                  </tr>
-                ) : (
-                  filteredPositions.map((position) => {
-                    const isPnlPositive = String(position.pnl).startsWith("+");
-                    const isSelected = selectedMarket === position.market;
+  {filteredPositions.length === 0 ? (
+    <tr>
+      <td colSpan={8} style={{ padding: "32px", textAlign: "center", color: "#8b949e" }}>
+        No positions found for this strategy.
+      </td>
+    </tr>
+  ) : (
+    filteredPositions.map((position) => {
+      const isPnlPositive = position.pnlUsd >= 0;
+      const isSelected = selectedMarket === position.market;
 
-                    return (
-                      <tr 
-                        key={position.id} 
-                        onClick={() => setSelectedMarket(position.market)}
-                        style={{ 
-                          borderBottom: "1px solid #30363d", 
-                          cursor: "pointer", 
-                          backgroundColor: isSelected ? "#1f242e" : "transparent",
-                          transition: "background 0.2s"
-                        }}
-                      >
-                        <td style={{ padding: "16px", color: "#e6edf3", fontWeight: "600" }}>{position.market}</td>
-                        <td style={{ padding: "16px" }}>
-                          <span style={{ padding: "4px 10px", borderRadius: "6px", fontSize: "12px", fontWeight: "600", backgroundColor: position.side === "OPEN_LONG" ? "rgba(38, 166, 65, 0.1)" : "rgba(248, 81, 73, 0.1)", color: position.side === "OPEN_LONG" ? "#26a641" : "#f85149" }}>
-                            {position.side}
-                          </span>
-                        </td>
-                        <td style={{ padding: "16px", color: "#e6edf3" }}>${position.collateral}</td>
-                        <td style={{ padding: "16px", color: "#e6edf3" }}>{position.leverage}</td>
-                        <td style={{ padding: "16px", color: "#e6edf3", fontFamily: "monospace" }}>${position.entryPrice}</td>
-                        <td style={{ padding: "16px", color: "#e6edf3", fontFamily: "monospace" }}>${position.currentPrice}</td>
-                        <td style={{ padding: "16px" }}>
-                          <div style={{ display: "flex", flexDirection: "column", gap: "2px" }}>
-                            <span style={{ color: isPnlPositive ? "#26a641" : "#f85149", fontWeight: "600", fontSize: "14px" }}>{position.pnl}</span>
-                            <span style={{ color: isPnlPositive ? "#26a641" : "#f85149", fontSize: "11px" }}>{position.pnlPercent}</span>
-                          </div>
-                        </td>
-                        <td style={{ padding: "16px" }}>
-                          <span style={{ padding: "4px 10px", borderRadius: "6px", fontSize: "11px", fontWeight: "600", backgroundColor: position.isOpen ? "rgba(31, 111, 235, 0.1)" : "rgba(139, 148, 158, 0.1)", color: position.isOpen ? "#58a6ff" : "#8b949e" }}>
-                            {position.isOpen ? "OPEN" : "CLOSED"}
-                          </span>
-                        </td>
-                      </tr>
-                    );
-                  })
-                )}
-              </tbody>
+      return (
+        <tr
+          key={position.id}
+          onClick={() => setSelectedMarket(position.market)}
+          style={{
+            borderBottom: "1px solid #30363d",
+            cursor: "pointer",
+            backgroundColor: isSelected ? "#1f242e" : "transparent",
+          }}
+        >
+          <td style={{ padding: "16px", fontWeight: 600 }}>
+            {position.market}
+          </td>
+
+          <td style={{ padding: "16px" }}>
+            <span
+              style={{
+                padding: "4px 10px",
+                borderRadius: "6px",
+                fontSize: "12px",
+                fontWeight: 600,
+                backgroundColor: position.isLong
+                  ? "rgba(38,166,65,0.1)"
+                  : "rgba(248,81,73,0.1)",
+                color: position.isLong ? "#26a641" : "#f85149",
+              }}
+            >
+              {position.isLong ? "LONG" : "SHORT"}
+            </span>
+          </td>
+
+          <td style={{ padding: "16px" }}>
+            ${position.collateral.toLocaleString(undefined, { maximumFractionDigits: 2 })}
+          </td>
+
+          <td style={{ padding: "16px" }}>
+            {position.leverage}x
+          </td>
+
+          <td style={{ padding: "16px", fontFamily: "monospace" }}>
+            ${position.entryPrice.toLocaleString(undefined, { maximumFractionDigits: 2 })}
+          </td>
+
+          <td style={{ padding: "16px", fontFamily: "monospace" }}>
+            ${position.currentPrice.toLocaleString(undefined, { maximumFractionDigits: 2 })}
+          </td>
+
+          <td style={{ padding: "16px" }}>
+            <div style={{ display: "flex", flexDirection: "column" }}>
+              <span
+                style={{
+                  color: isPnlPositive ? "#26a641" : "#f85149",
+                  fontWeight: 600,
+                }}
+              >
+                {isPnlPositive ? "+" : "-"}$
+                {Math.abs(position.pnlUsd).toLocaleString(undefined, { maximumFractionDigits: 2 })}
+              </span>
+              <span
+                style={{
+                  fontSize: "11px",
+                  color: isPnlPositive ? "#26a641" : "#f85149",
+                }}
+              >
+                {isPnlPositive ? "+" : "-"}
+                {Math.abs(position.pnlPercent).toFixed(2)}%
+              </span>
+            </div>
+          </td>
+
+          <td style={{ padding: "16px" }}>
+            <span
+              style={{
+                padding: "4px 10px",
+                borderRadius: "6px",
+                fontSize: "11px",
+                fontWeight: 600,
+                backgroundColor: position.isOpen
+                  ? "rgba(31,111,235,0.1)"
+                  : "rgba(139,148,158,0.1)",
+                color: position.isOpen ? "#58a6ff" : "#8b949e",
+              }}
+            >
+              {position.isOpen ? "OPEN" : "CLOSED"}
+            </span>
+          </td>
+        </tr>
+      );
+    })
+  )}
+</tbody>
+
             </table>
           </div>
         </div>

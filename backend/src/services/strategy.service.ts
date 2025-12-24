@@ -55,7 +55,7 @@ class StrategyService {
   }
 
   async getByLeader(address: string) {
-    return prisma.leader.findFirst({
+    return prisma.leader.findMany({
       where: { address },
       orderBy: { createdAt: "desc" },
     });
@@ -79,24 +79,24 @@ class StrategyService {
       console.log(`   Token: ${indexTokenSymbol} -> ${tokenAddress}`);
       console.log(`   Size: $${sizeUsd}`);
 
-      const hash = await wc.writeContract({
-        address: config.CORE_CONTRACT,
-        abi: coreABI,
-        functionName: isLong ? "leaderOpenLong" : "leaderOpenShort",
-        args: [
-          BigInt(leaderId),
-          BigInt(Math.floor(Number(sizeUsd))),
-          tokenAddress,
-        ],
-      });
+      // const hash = await wc.writeContract({
+      //   address: config.CORE_CONTRACT,
+      //   abi: coreABI,
+      //   functionName: isLong ? "leaderOpenLong" : "leaderOpenShort",
+      //   args: [
+      //     BigInt(leaderId),
+      //     BigInt(Math.floor(Number(sizeUsd))),
+      //     tokenAddress,
+      //   ],
+      // });
 
-      console.log(`✅ Transaction sent: ${hash}`);
+      // console.log(`✅ Transaction sent: ${hash}`);
 
-      // Wait for confirmation
-      const receipt = await publicClient.waitForTransactionReceipt({ hash });
-      console.log(`✅ Confirmed in block ${receipt.blockNumber}\n`);
+      // // Wait for confirmation
+      // const receipt = await publicClient.waitForTransactionReceipt({ hash });
+      // console.log(`✅ Confirmed in block ${receipt.blockNumber}\n`);
 
-      return { success: true, txHash: hash, receipt };
+      return { success: true };
     } catch (error: any) {
       console.error("❌ Error opening position:", error);
       throw new Error(`Failed to open position: ${error.message}`);
