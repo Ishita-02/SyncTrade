@@ -42,7 +42,7 @@ interface IExchangeRouter {
     function sendWnt(address receiver, uint256 amount) external payable;
 }
 
-contract Core is Ownable, ReentrancyGuard {
+contract CoreUpdate is Ownable, ReentrancyGuard {
     using SafeERC20 for IERC20;
 
     /*//////////////////////////////////////////////////////////////

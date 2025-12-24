@@ -5,11 +5,6 @@
           "internalType": "address",
           "name": "_collateralToken",
           "type": "address"
-        },
-        {
-          "internalType": "address",
-          "name": "_priceOracle",
-          "type": "address"
         }
       ],
       "stateMutability": "nonpayable",
@@ -207,7 +202,7 @@
         {
           "indexed": false,
           "internalType": "uint256",
-          "name": "price",
+          "name": "entryPrice",
           "type": "uint256"
         }
       ],
@@ -272,25 +267,6 @@
           "internalType": "address",
           "name": "follower",
           "type": "address"
-        }
-      ],
-      "name": "PositionClosed",
-      "type": "event"
-    },
-    {
-      "anonymous": false,
-      "inputs": [
-        {
-          "indexed": true,
-          "internalType": "uint256",
-          "name": "leaderId",
-          "type": "uint256"
-        },
-        {
-          "indexed": true,
-          "internalType": "address",
-          "name": "follower",
-          "type": "address"
         },
         {
           "indexed": false,
@@ -326,29 +302,6 @@
       ],
       "name": "Unsubscribed",
       "type": "event"
-    },
-    {
-      "inputs": [
-        {
-          "internalType": "address",
-          "name": "token",
-          "type": "address"
-        },
-        {
-          "internalType": "address",
-          "name": "to",
-          "type": "address"
-        },
-        {
-          "internalType": "uint256",
-          "name": "amount",
-          "type": "uint256"
-        }
-      ],
-      "name": "adminWithdrawERC20",
-      "outputs": [],
-      "stateMutability": "nonpayable",
-      "type": "function"
     },
     {
       "inputs": [],
@@ -461,135 +414,6 @@
           "internalType": "uint256",
           "name": "leaderId",
           "type": "uint256"
-        },
-        {
-          "internalType": "address",
-          "name": "follower",
-          "type": "address"
-        }
-      ],
-      "name": "getFollowerPosition",
-      "outputs": [
-        {
-          "components": [
-            {
-              "internalType": "bool",
-              "name": "isLong",
-              "type": "bool"
-            },
-            {
-              "internalType": "uint256",
-              "name": "entryPrice",
-              "type": "uint256"
-            },
-            {
-              "internalType": "uint256",
-              "name": "sizeUsd",
-              "type": "uint256"
-            },
-            {
-              "internalType": "bool",
-              "name": "isOpen",
-              "type": "bool"
-            },
-            {
-              "internalType": "address",
-              "name": "indexToken",
-              "type": "address"
-            }
-          ],
-          "internalType": "struct Core.FollowerPosition",
-          "name": "",
-          "type": "tuple"
-        }
-      ],
-      "stateMutability": "view",
-      "type": "function"
-    },
-    {
-      "inputs": [
-        {
-          "internalType": "uint256",
-          "name": "leaderId",
-          "type": "uint256"
-        }
-      ],
-      "name": "getFollowers",
-      "outputs": [
-        {
-          "internalType": "address[]",
-          "name": "",
-          "type": "address[]"
-        }
-      ],
-      "stateMutability": "view",
-      "type": "function"
-    },
-    {
-      "inputs": [
-        {
-          "internalType": "uint256",
-          "name": "leaderId",
-          "type": "uint256"
-        }
-      ],
-      "name": "getLeaderPosition",
-      "outputs": [
-        {
-          "components": [
-            {
-              "internalType": "bool",
-              "name": "isLong",
-              "type": "bool"
-            },
-            {
-              "internalType": "uint256",
-              "name": "entryPrice",
-              "type": "uint256"
-            },
-            {
-              "internalType": "uint256",
-              "name": "sizeUsd",
-              "type": "uint256"
-            },
-            {
-              "internalType": "bool",
-              "name": "isOpen",
-              "type": "bool"
-            },
-            {
-              "internalType": "address",
-              "name": "indexToken",
-              "type": "address"
-            }
-          ],
-          "internalType": "struct Core.LeaderPosition",
-          "name": "",
-          "type": "tuple"
-        }
-      ],
-      "stateMutability": "view",
-      "type": "function"
-    },
-    {
-      "inputs": [],
-      "name": "gmxRouter",
-      "outputs": [
-        {
-          "internalType": "contract IGMXRouter",
-          "name": "",
-          "type": "address"
-        }
-      ],
-      "stateMutability": "view",
-      "type": "function"
-    },
-    {
-      "inputs": [
-        {
-          "internalType": "uint256",
-          "name": "leaderId",
-          "type": "uint256"
         }
       ],
       "name": "leaderClose",
@@ -624,26 +448,13 @@
           "type": "uint256"
         },
         {
-          "internalType": "uint256",
-          "name": "sizeUsd",
-          "type": "uint256"
+          "internalType": "bool",
+          "name": "isLong",
+          "type": "bool"
         },
         {
-          "internalType": "address",
-          "name": "indexToken",
-          "type": "address"
-        }
-      ],
-      "name": "leaderOpenLong",
-      "outputs": [],
-      "stateMutability": "nonpayable",
-      "type": "function"
-    },
-    {
-      "inputs": [
-        {
           "internalType": "uint256",
-          "name": "leaderId",
+          "name": "entryPrice",
           "type": "uint256"
         },
         {
@@ -657,7 +468,7 @@
           "type": "address"
         }
       ],
-      "name": "leaderOpenShort",
+      "name": "leaderOpenPosition",
       "outputs": [],
       "stateMutability": "nonpayable",
       "type": "function"
@@ -790,19 +601,6 @@
       "type": "function"
     },
     {
-      "inputs": [],
-      "name": "priceOracle",
-      "outputs": [
-        {
-          "internalType": "contract ChainlinkOracle",
-          "name": "",
-          "type": "address"
-        }
-      ],
-      "stateMutability": "view",
-      "type": "function"
-    },
-    {
       "inputs": [
         {
           "internalType": "string",
@@ -836,38 +634,22 @@
     {
       "inputs": [
         {
-          "internalType": "address",
-          "name": "_token",
-          "type": "address"
-        }
-      ],
-      "name": "setCollateralToken",
-      "outputs": [],
-      "stateMutability": "nonpayable",
-      "type": "function"
-    },
-    {
-      "inputs": [
+          "internalType": "uint256",
+          "name": "leaderId",
+          "type": "uint256"
+        },
         {
           "internalType": "address",
-          "name": "_gmxRouter",
+          "name": "follower",
           "type": "address"
-        }
-      ],
-      "name": "setGmxRouter",
-      "outputs": [],
-      "stateMutability": "nonpayable",
-      "type": "function"
-    },
-    {
-      "inputs": [
+        },
         {
-          "internalType": "address",
-          "name": "_oracle",
-          "type": "address"
+          "internalType": "int256",
+          "name": "pnlUsd",
+          "type": "int256"
         }
       ],
-      "name": "setPriceOracle",
+      "name": "settleFollowerPnL",
       "outputs": [],
       "stateMutability": "nonpayable",
       "type": "function"
