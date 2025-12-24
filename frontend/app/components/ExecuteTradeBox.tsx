@@ -60,13 +60,10 @@ export default function ExecuteTradeBox({ market, leaderId }: ExecuteTradeBoxPro
     ? currentPrice * (1 - (1/leverage) * liqThreshold)
     : currentPrice * (1 + (1/leverage) * liqThreshold);
 
-  // --- API HANDLERS ---
   useEffect(() => {
     if (isSuccess) {
       setStatus("✅ Position Confirmed on Blockchain!");
       setCollateral("");
-      // NOTE: You do NOT need to call an API here. 
-      // The Backend Indexer will see this transaction and update the DB automatically.
     }
   }, [isSuccess]);
 
@@ -82,21 +79,33 @@ const handleOpenPosition = async (e: React.FormEvent) => {
       return;
     }
 
-    // 2. Parse Size (assuming 18 decimals for WETH/ETH, 6 for USDC)
-    // Adjust decimals based on the token if needed
-    const decimals = asset === "USDC" ? 6 : 18;
-    const sizeAmount = parseUnits(collateral, decimals);
+    const isLong = side === "Long";
 
-    // 3. Send Transaction
+    const decimals = asset === "USDC" ? 6 : 18;
+
+    const entryPrice = parseUnits(
+      currentPrice.toString(),
+      decimals
+    );
+
+    const sizeUsd = parseUnits(
+      (collateralVal * leverage).toString(),
+      decimals
+    );
+
+    // const sizeAmount = parseUnits(collateral, decimals);
+
     writeContract({
       address: CORE_CONTRACT,
       abi: CORE_ABI as any,
-      functionName: side === "Long" ? "leaderOpenLong" : "leaderOpenShort",
+      functionName: "leaderOpenPosition",
       args: [
         BigInt(leaderId),
-        sizeAmount, 
-        indexToken as `0x${string}`
-      ],
+        isLong,
+        entryPrice,
+        sizeUsd,
+        indexToken as `0x${string}`,
+    ],
     });
   };
 

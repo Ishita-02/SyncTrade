@@ -4,9 +4,10 @@ import { useAccount } from "wagmi";
 import { useParams } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "../../../lib/api";
-import { Wallet, TrendingUp, DollarSign, Activity, ExternalLink } from "lucide-react";
+import { Wallet, TrendingUp, DollarSign, Activity, ExternalLink, ChevronDown } from "lucide-react";
 import Link from "next/link";
 import { ConnectButton } from "@rainbow-me/rainbowkit";
+import { useState } from "react";
 
 // --- TYPES ---
 type Position = {
@@ -22,6 +23,18 @@ type Position = {
   indexToken: string; 
   txHash: string;
   timestamp: string;
+};
+
+type Leader = {
+  id: number;
+  address: string;
+  name?: string;
+};
+
+type Strategy = {
+  id: number;
+  name: string;
+  leaderId: number;
 };
 
 // Update these with the addresses from your deployment log
@@ -48,24 +61,80 @@ function formatUsd(value: string | undefined | null) {
   }).format(num);
 }
 
+function formatAddress(address: string) {
+  return `${address.slice(0, 6)}...${address.slice(-4)}`;
+}
+
 export default function PortfolioPage() {
   const { id } = useParams();
   const leaderId = Number(id);
   const { address } = useAccount();
 
-  // Fetch Data
-  const { data, isLoading } = useQuery({
-    queryKey: ["portfolio", address],
-    queryFn: () => api<Position[]>(`/leaders/${leaderId}/followers/${address}/positions`), 
-    enabled: !!address,
+  // View state: "leader" or "follower"
+  const [viewMode, setViewMode] = useState<"leader" | "follower">("leader");
+  
+  // Selected strategy/leader for filtering
+  const [selectedStrategyId, setSelectedStrategyId] = useState<number | null>(null);
+  const [selectedFollowingLeaderId, setSelectedFollowingLeaderId] = useState<number | null>(null);
+
+  // Fetch leader positions (when user is a leader)
+  const { data: leaderPositions, isLoading: leaderLoading } = useQuery({
+    queryKey: ["leader-positions", leaderId],
+    queryFn: () => api<Position[]>(`/leaders/${leaderId}/positions`),
+    enabled: !!address && viewMode === "leader",
   });
 
-  const positions = data || [];
-  console.log(data)
+  // Fetch follower positions (when user is a follower)
+  const { data: followerPositions, isLoading: followerLoading } = useQuery({
+    queryKey: ["follower-positions", address],
+    queryFn: () => api<Position[]>(`/leaders/${leaderId}/followers/${address}/positions`),
+    enabled: !!address && viewMode === "follower",
+  });
 
-  // Calculate Stats dynamically from positions if backend doesn't aggregate
+  // Fetch user's strategies (as a leader)
+  const { data: strategies } = useQuery({
+    queryKey: ["user-strategies", address],
+    queryFn: () => api<Strategy[]>(`/users/${address}/strategies`),
+    enabled: !!address && viewMode === "leader",
+  });
+
+  // Fetch leaders the user is following
+  const { data: followedLeaders } = useQuery({
+    queryKey: ["followed-leaders", address],
+    queryFn: () => api<Leader[]>(`/users/${address}/following`),
+    enabled: !!address && viewMode === "follower",
+  });
+
+  // Get current positions based on view mode
+  const getCurrentPositions = () => {
+    if (viewMode === "leader") {
+      let positions = leaderPositions || [];
+      if (selectedStrategyId) {
+        // Filter by strategy if your Position type includes strategyId
+        // positions = positions.filter(p => p.strategyId === selectedStrategyId);
+        return positions;
+      }
+      return positions;
+    } else {
+      let positions = followerPositions || [];
+      if (selectedFollowingLeaderId) {
+        positions = positions.filter(p => p.leaderId === selectedFollowingLeaderId);
+      }
+      return positions;
+    }
+  };
+
+  const positions = getCurrentPositions();
+  const isLoading = viewMode === "leader" ? leaderLoading : followerLoading;
+
+  // Calculate Stats
   const totalVolume = positions.reduce((acc, pos) => acc + Number(pos.sizeUsd), 0);
   const openPositionsCount = positions.filter((p) => p.isOpen).length;
+  const closedPositions = positions.filter((p) => !p.isOpen);
+  const winningTrades = closedPositions.filter((p) => p.pnlUsd && Number(p.pnlUsd) > 0).length;
+  const winRate = closedPositions.length > 0 
+    ? `${Math.round((winningTrades / closedPositions.length) * 100)}%` 
+    : "N/A";
 
   const stats = [
     {
@@ -80,7 +149,7 @@ export default function PortfolioPage() {
     },
     {
       label: "Win Rate",
-      value: "100%", // Placeholder or calculate based on closed trades
+      value: winRate,
       icon: Activity,
     },
   ];
@@ -138,6 +207,129 @@ export default function PortfolioPage() {
 
       <div style={{ maxWidth: "1400px", margin: "0 auto", padding: "32px 24px" }}>
         
+        {/* View Mode Switcher */}
+        <div style={{ display: "flex", gap: "16px", marginBottom: "24px" }}>
+          <button
+            onClick={() => {
+              setViewMode("leader");
+              setSelectedFollowingLeaderId(null);
+            }}
+            style={{
+              padding: "12px 24px",
+              borderRadius: "8px",
+              border: "1px solid #30363d",
+              backgroundColor: viewMode === "leader" ? "#58a6ff" : "#161b22",
+              color: viewMode === "leader" ? "#0d1117" : "#e6edf3",
+              fontWeight: "600",
+              cursor: "pointer",
+              transition: "all 0.2s",
+            }}
+          >
+            My Strategies (Leader)
+          </button>
+          <button
+            onClick={() => {
+              setViewMode("follower");
+              setSelectedStrategyId(null);
+            }}
+            style={{
+              padding: "12px 24px",
+              borderRadius: "8px",
+              border: "1px solid #30363d",
+              backgroundColor: viewMode === "follower" ? "#58a6ff" : "#161b22",
+              color: viewMode === "follower" ? "#0d1117" : "#e6edf3",
+              fontWeight: "600",
+              cursor: "pointer",
+              transition: "all 0.2s",
+            }}
+          >
+            Following (Follower)
+          </button>
+        </div>
+
+        {/* Strategy/Leader Filter */}
+        <div style={{ marginBottom: "24px" }}>
+          {viewMode === "leader" ? (
+            <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+              <label style={{ color: "#8b949e", fontSize: "14px" }}>Filter by Strategy:</label>
+              <div style={{ position: "relative" }}>
+                <select
+                  value={selectedStrategyId || ""}
+                  onChange={(e) => setSelectedStrategyId(e.target.value ? Number(e.target.value) : null)}
+                  style={{
+                    padding: "8px 36px 8px 12px",
+                    borderRadius: "6px",
+                    border: "1px solid #30363d",
+                    backgroundColor: "#161b22",
+                    color: "#e6edf3",
+                    fontSize: "14px",
+                    cursor: "pointer",
+                    appearance: "none",
+                    minWidth: "200px",
+                  }}
+                >
+                  <option value="">All Strategies</option>
+                  {(strategies || []).map((strategy) => (
+                    <option key={strategy.id} value={strategy.id}>
+                      {strategy.name}
+                    </option>
+                  ))}
+                </select>
+                <ChevronDown 
+                  size={16} 
+                  style={{ 
+                    position: "absolute", 
+                    right: "12px", 
+                    top: "50%", 
+                    transform: "translateY(-50%)",
+                    pointerEvents: "none",
+                    color: "#8b949e"
+                  }} 
+                />
+              </div>
+            </div>
+          ) : (
+            <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+              <label style={{ color: "#8b949e", fontSize: "14px" }}>Filter by Leader:</label>
+              <div style={{ position: "relative" }}>
+                <select
+                  value={selectedFollowingLeaderId || ""}
+                  onChange={(e) => setSelectedFollowingLeaderId(e.target.value ? Number(e.target.value) : null)}
+                  style={{
+                    padding: "8px 36px 8px 12px",
+                    borderRadius: "6px",
+                    border: "1px solid #30363d",
+                    backgroundColor: "#161b22",
+                    color: "#e6edf3",
+                    fontSize: "14px",
+                    cursor: "pointer",
+                    appearance: "none",
+                    minWidth: "200px",
+                  }}
+                >
+                  <option value="">All Leaders</option>
+                  {(followedLeaders || []).map((leader) => (
+                    <option key={leader.id} value={leader.id}>
+                      {leader.name || formatAddress(leader.address)}
+                    </option>
+                  ))}
+                </select>
+                <ChevronDown 
+                  size={16} 
+                  style={{ 
+                    position: "absolute", 
+                    right: "12px", 
+                    top: "50%", 
+                    transform: "translateY(-50%)",
+                    pointerEvents: "none",
+                    color: "#8b949e"
+                  }} 
+                />
+              </div>
+            </div>
+          )}
+        </div>
+
         {/* Stats Grid */}
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(250px, 1fr))", gap: "16px", marginBottom: "32px" }}>
           {stats.map((stat, i) => {
@@ -157,7 +349,14 @@ export default function PortfolioPage() {
         </div>
 
         {/* Positions Section */}
-        <h2 style={{ fontSize: "24px", fontWeight: "700", marginBottom: "16px" }}>Your Positions</h2>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px" }}>
+          <h2 style={{ fontSize: "24px", fontWeight: "700", margin: 0 }}>
+            {viewMode === "leader" ? "Your Positions" : "Mirrored Positions"}
+          </h2>
+          <div style={{ color: "#8b949e", fontSize: "14px" }}>
+            {positions.length} position{positions.length !== 1 ? "s" : ""}
+          </div>
+        </div>
         
         <div style={{ backgroundColor: "#161b22", border: "1px solid #30363d", borderRadius: "12px", overflow: "hidden" }}>
           <table style={{ width: "100%", borderCollapse: "collapse", textAlign: "left" }}>
@@ -167,6 +366,7 @@ export default function PortfolioPage() {
                 <th style={{ padding: "16px 24px" }}>Side</th>
                 <th style={{ padding: "16px 24px" }}>Size (USD)</th>
                 <th style={{ padding: "16px 24px" }}>Entry Price</th>
+                {viewMode === "follower" && <th style={{ padding: "16px 24px" }}>Leader</th>}
                 <th style={{ padding: "16px 24px" }}>Status</th>
                 <th style={{ padding: "16px 24px" }}>Tx</th>
               </tr>
@@ -174,8 +374,10 @@ export default function PortfolioPage() {
             <tbody>
               {positions.length === 0 ? (
                  <tr>
-                   <td colSpan={6} style={{ padding: "48px", textAlign: "center", color: "#8b949e" }}>
-                     No positions found. Start trading to see activity here.
+                   <td colSpan={viewMode === "follower" ? 7 : 6} style={{ padding: "48px", textAlign: "center", color: "#8b949e" }}>
+                     {viewMode === "leader" 
+                       ? "No positions found. Create a strategy and start trading." 
+                       : "No mirrored positions found. Follow leaders to see their trades here."}
                    </td>
                  </tr>
               ) : (
@@ -210,14 +412,22 @@ export default function PortfolioPage() {
                       {Number(pos.entryPrice) > 0 ? formatUsd(pos.entryPrice) : "-"}
                     </td>
 
-                    {/* 5. Status */}
+                    {/* 5. Leader (only in follower mode) */}
+                    {viewMode === "follower" && (
+                      <td style={{ padding: "16px 24px", color: "#8b949e", fontSize: "13px" }}>
+                        {(followedLeaders || []).find(l => l.id === pos.leaderId)?.name || 
+                         formatAddress((followedLeaders || []).find(l => l.id === pos.leaderId)?.address || "")}
+                      </td>
+                    )}
+
+                    {/* 6. Status */}
                     <td style={{ padding: "16px 24px" }}>
                        <span style={{ color: pos.isOpen ? "#58a6ff" : "#8b949e" }}>
                          {pos.isOpen ? "OPEN" : "CLOSED"}
                        </span>
                     </td>
 
-                    {/* 6. Transaction Link */}
+                    {/* 7. Transaction Link */}
                     <td style={{ padding: "16px 24px" }}>
                       <a 
                         href={`https://sepolia.arbiscan.io/tx/${pos.txHash}`} 

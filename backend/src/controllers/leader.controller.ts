@@ -1,4 +1,4 @@
-import { getAllLeaders, getLeaderById } from "../services/leader.service.js";
+import { getAllLeaders, getLeaderById, leaderByAddress } from "../services/leader.service.js";
 import { computeLeaderStats } from "../services/pnl.service.js";
 
 export const listLeaders = async (req: any, reply: any) => {
@@ -18,3 +18,10 @@ export const getLeaderStats = async (req: any, reply: any) => {
   const stats = await computeLeaderStats(id);
   return reply.send(stats);
 };
+
+export const getLeaderByAddress = async(req: any, reply: any) => {
+  const address = req.params.address;
+  const leader = await leaderByAddress(address);
+  if (!leader) return reply.status(404).send({ error: "not found" });
+  return reply.send(leader);
+}

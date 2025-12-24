@@ -25,3 +25,9 @@ export const upsertLeaderMeta = async (leaderId: number, address: string, meta?:
     create: { leaderId, address, meta, feeBps: feeBps ?? 0, totalFollowers: 0, totalDeposits: "0", feesAccrued: "0" },
   });
 };
+
+export const leaderByAddress = async (address: string) => {
+  return prisma.leader.findFirst({
+    where: { address: address }
+  });
+};

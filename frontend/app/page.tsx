@@ -19,7 +19,7 @@ type Leader = {
 
 export default function StrategyPage() {
   const router = useRouter();
-  const { isConnected } = useAccount();
+  const { isConnected, address } = useAccount();
 
   const handleCreateStrategy = () => {
     if (!isConnected) {
@@ -34,6 +34,10 @@ export default function StrategyPage() {
     queryFn: () => api<Leader[]>("/leaders"),
   });
 
+  const { data: userLeaderData } = useQuery({
+    queryKey: ["leaders", address],
+    queryFn: () => api<Leader>(`/leaders/address/${address}`),
+  });
   const leaders = data || [];
 
   const stats = [
@@ -96,8 +100,8 @@ export default function StrategyPage() {
                 <Link href="/" style={{ color: "#58a6ff", textDecoration: "none", fontWeight: "500" }}>
                   Strategies
                 </Link>
-                <Link href="/portfolio" style={{ color: "#8b949e", textDecoration: "none", transition: "color 0.2s" }}>
-                  Portfolio
+                <Link href={`/portfolio/${userLeaderData?.leaderId}`} style={{ color: "#8b949e", textDecoration: "none", transition: "color 0.2s" }}>
+                Portfolio
                 </Link>
               </nav>
             </div>
