@@ -2,6 +2,14 @@ import "./globals.css";
 import "./styles/ui.css";
 import Providers from "./providers";
 import { Toaster } from "react-hot-toast";
+import type { Metadata } from "next";
+import Navbar from "./components/Navbar";
+
+
+export const metadata: Metadata = {
+  title: "SyncTrade",
+  description: "Copy trading platform",
+};
 
 export default function RootLayout({
   children,
@@ -12,6 +20,7 @@ export default function RootLayout({
     <html lang="en">
       <body>
         <Providers>
+          <Navbar />
           {children}
 
           <Toaster

@@ -84,31 +84,6 @@ export default function StrategyPage() {
 
   return (
     <div style={{ backgroundColor: "#0f1419", minHeight: "100vh", color: "#e6edf3" }}>
-      {/* HEADER */}
-      <header style={{ backgroundColor: "#161b22", borderBottom: "1px solid #30363d" }}>
-        <div style={{ maxWidth: "1400px", margin: "0 auto", padding: "0 24px" }}>
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "16px 0" }}>
-            <div style={{ display: "flex", alignItems: "center", gap: "48px" }}>
-              <h1 style={{ fontSize: "20px", fontWeight: "700", color: "#e6edf3", margin: 0 }}>
-                SyncTrade
-              </h1>
-              <nav style={{ display: "flex", gap: "32px" }}>
-                {/* Updated Link to point to the new Trade page */}
-                <Link href="/trade" style={{ color: "#8b949e", textDecoration: "none", transition: "color 0.2s" }}>
-                  Markets
-                </Link>
-                <Link href="/" style={{ color: "#58a6ff", textDecoration: "none", fontWeight: "500" }}>
-                  Strategies
-                </Link>
-                <Link href={`/portfolio/${userLeaderData?.leaderId}`} style={{ color: "#8b949e", textDecoration: "none", transition: "color 0.2s" }}>
-                Portfolio
-                </Link>
-              </nav>
-            </div>
-            <ConnectButton showBalance={false} chainStatus="icon" accountStatus="address" />
-          </div>
-        </div>
-      </header>
 
       <div style={{ maxWidth: "1400px", margin: "0 auto", padding: "32px 24px" }}>
         {/* STATS GRID */}
