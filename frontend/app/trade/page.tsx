@@ -2,67 +2,27 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { ConnectButton } from "@rainbow-me/rainbowkit";
 import { useAccount } from "wagmi";
-import { useQuery } from "@tanstack/react-query";
-import { api } from "@/lib/api"; // Ensure this matches your api helper path
+// 1. Import the Context
+import { useMode } from "../context/ModeContext"; 
 
 // Components
 import CandlestickChart from "../components/CandleStickChart";
 import ExecuteTradeBox from "../components/ExecuteTradeBox";
-
-// Type definition for the strategy/leader response
-type MyStrategy = {
-  leaderId: number;
-  address: string;
-  // add other fields if needed
-};
+import { ShieldCheck, LineChart } from "lucide-react"; // Optional icons
 
 export default function TradePage() {
   const [activeMarket, setActiveMarket] = useState("ETH-USD");
   const markets = ["ETH-USD", "BTC-USD", "SOL-USD", "ARB-USD", "LINK-USD"];
 
-  // 1. Get connected wallet address
-  const { address, isConnected } = useAccount();
-
-  // 2. Fetch the Leader ID associated with this address
-  const { data: strategy, isLoading: isStrategyLoading } = useQuery({
-    queryKey: ["my-strategy", address],
-    queryFn: () => api<MyStrategy>(`/strategies/me/${address}`),
-    enabled: !!address, // Only run if address exists
-    retry: false,       // Don't retry if 404 (meaning user hasn't created strategy yet)
-  });
-
-  console.log("strategy", strategy)
-
-  const leaderId = strategy?.leaderId;
+  const { isConnected } = useAccount();
+  
+  // 2. Consume global state
+  const { viewMode, activeStrategyId } = useMode();
+  console.log("strategy id", activeStrategyId)
 
   return (
     <div style={{ backgroundColor: "#0f1419", minHeight: "100vh", color: "#e6edf3" }}>
-      {/* HEADER */}
-      <header style={{ backgroundColor: "#161b22", borderBottom: "1px solid #30363d" }}>
-        <div style={{ maxWidth: "1400px", margin: "0 auto", padding: "0 24px" }}>
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "16px 0" }}>
-            <div style={{ display: "flex", alignItems: "center", gap: "48px" }}>
-              <h1 style={{ fontSize: "20px", fontWeight: "700", color: "#e6edf3", margin: 0 }}>
-                SyncTrade
-              </h1>
-              <nav style={{ display: "flex", gap: "32px" }}>
-                <Link href="/trade" style={{ color: "#58a6ff", textDecoration: "none", fontWeight: "500" }}>
-                  Markets
-                </Link>
-                <Link href="/" style={{ color: "#8b949e", textDecoration: "none", transition: "color 0.2s" }}>
-                  Strategies
-                </Link>
-                <Link href="/portfolio" style={{ color: "#8b949e", textDecoration: "none", transition: "color 0.2s" }}>
-                  Portfolio
-                </Link>
-              </nav>
-            </div>
-            <ConnectButton showBalance={false} chainStatus="icon" accountStatus="address" />
-          </div>
-        </div>
-      </header>
 
       <div style={{ maxWidth: "1400px", margin: "0 auto", padding: "32px 24px" }}>
         
@@ -113,7 +73,7 @@ export default function TradePage() {
             </div>
           </div>
 
-          {/* RIGHT SIDE: EXECUTE TRADE BOX */}
+          {/* RIGHT SIDE: CONTEXT AWARE PANEL */}
           <div style={{ 
             width: "380px", 
             backgroundColor: "#161b22", 
@@ -123,33 +83,83 @@ export default function TradePage() {
             display: "flex",
             flexDirection: "column"
           }}>
-             <h3 style={{ color: "#e6edf3", fontSize: "18px", fontWeight: "600", marginBottom: "24px" }}>
-               Open Position
-             </h3>
              
-             {/* LOGIC:
-                1. If loading -> Show loading text
-                2. If not connected -> Show "Connect Wallet" message
-                3. If connected but no leaderId -> Show "Create Strategy" message
-                4. If leaderId exists -> Show ExecuteTradeBox 
-             */}
-             
-             {isStrategyLoading ? (
-               <div style={{ color: "#8b949e", textAlign: "center", marginTop: "20px" }}>Loading strategy data...</div>
-             ) : !isConnected ? (
-               <div style={{ textAlign: "center", marginTop: "20px", color: "#f85149" }}>
-                 Please connect your wallet to trade.
-               </div>
-             ) : !leaderId ? (
-               <div style={{ textAlign: "center", marginTop: "20px" }}>
-                 <p style={{ color: "#8b949e", marginBottom: "12px" }}>You don't have an active strategy.</p>
-                 <Link href="/create-strategy" style={{ color: "#58a6ff", textDecoration: "none", fontWeight: "600" }}>
-                   Create a Strategy First &rarr;
-                 </Link>
+             {/* CASE 1: NOT CONNECTED */}
+             {!isConnected ? (
+               <div style={{ textAlign: "center", marginTop: "40px", color: "#f85149" }}>
+                 <p style={{ fontWeight: "600", marginBottom: "8px" }}>Wallet Not Connected</p>
+                 <p style={{ fontSize: "14px", color: "#8b949e" }}>Please connect your wallet to access trading features.</p>
                </div>
              ) : (
-               <ExecuteTradeBox market={activeMarket} leaderId={leaderId} />
+               <>
+                  {/* CASE 2: FOLLOWER MODE */}
+                  {viewMode === "follower" ? (
+                    <div>
+                      <h3 style={{ color: "#e6edf3", fontSize: "18px", fontWeight: "600", marginBottom: "24px", display: "flex", alignItems: "center", gap: "8px" }}>
+                        <ShieldCheck size={20} color="#58a6ff"/> Follower View
+                      </h3>
+                      
+                      {!activeStrategyId ? (
+                        <div style={{ textAlign: "center", color: "#8b949e", marginTop: "20px" }}>
+                          Please select a Leader to view from the Navbar.
+                        </div>
+                      ) : (
+                        <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+                          <div style={{ padding: "16px", backgroundColor: "#21262d", borderRadius: "8px", border: "1px solid #30363d" }}>
+                            <div style={{ fontSize: "13px", color: "#8b949e", marginBottom: "4px" }}>Following Leader</div>
+                            <div style={{ fontSize: "20px", fontWeight: "700", color: "#58a6ff" }}>#{activeStrategyId}</div>
+                          </div>
+                          
+                          <div style={{ padding: "16px", backgroundColor: "rgba(31, 111, 235, 0.1)", borderRadius: "8px", border: "1px solid rgba(31, 111, 235, 0.4)" }}>
+                             <p style={{ fontSize: "14px", color: "#e6edf3", lineHeight: "1.5", margin: 0 }}>
+                               You are currently in <strong>Follower Mode</strong>. 
+                               Trades executed by Leader #{activeStrategyId} in <strong>{activeMarket}</strong> will be automatically copied to your portfolio based on your subscription settings.
+                             </p>
+                          </div>
+
+                          <Link 
+                            href={`/leader/${activeStrategyId}`}
+                            style={{ 
+                              display: "block", 
+                              textAlign: "center", 
+                              marginTop: "16px",
+                              color: "#58a6ff", 
+                              textDecoration: "none", 
+                              fontSize: "14px", 
+                              fontWeight: "600" 
+                            }}
+                          >
+                            View Leader Performance &rarr;
+                          </Link>
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    /* CASE 3: LEADER MODE */
+                    <div>
+                       <h3 style={{ color: "#e6edf3", fontSize: "18px", fontWeight: "600", marginBottom: "24px", display: "flex", alignItems: "center", gap: "8px" }}>
+                         <LineChart size={20} color="#238636" /> Open Position
+                       </h3>
+
+                       {activeStrategyId === null ? (
+                         <div style={{ textAlign: "center", marginTop: "20px" }}>
+                           <p style={{ color: "#8b949e", marginBottom: "12px" }}>No Strategy Selected.</p>
+                           <p style={{ fontSize: "13px", color: "#8b949e", marginBottom: "24px" }}>
+                             Select one from the navbar or create a new one to start trading.
+                           </p>
+                           <Link href="/create-strategy" style={{ color: "#58a6ff", textDecoration: "none", fontWeight: "600" }}>
+                             Create a Strategy &rarr;
+                           </Link>
+                         </div>
+                       ) : (
+                         /* SHOW EXECUTE TRADE BOX */
+                         <ExecuteTradeBox market={activeMarket} leaderId={activeStrategyId} />
+                       )}
+                    </div>
+                  )}
+               </>
              )}
+
           </div>
 
         </div>
