@@ -1,9 +1,3 @@
-/**
- * Indexer service: watches Core contract events and persists to Prisma
- *
- * Note: coreAbi must exist at backend/abi/Core.json
- */
-
 import { publicClient } from "../utils/viem.js";
 import prisma from "../db/prisma.js";
 import {coreABI} from "../abi/core.js";
@@ -18,23 +12,18 @@ const safeBlock = (b: bigint | null): number | undefined =>
   b !== null ? Number(b) : undefined;
 
 
-/**
- * Helper: safe store event log
- */
 async function persistEvent(event: string, args: any, txHash?: string, blockNumber?: number) {
   try {
-    // 1. Serialize BigInts to Strings for the JSON 'args' column
     const safeArgs = JSON.parse(JSON.stringify(args, (key, value) =>
       typeof value === 'bigint' ? value.toString() : value
     ));
 
-    // 2. Extract Leader ID if present
     const rawLeaderId = args?.leaderId ? Number(args.leaderId) : null;
 
     await prisma.eventLog.create({
       data: {
         event,
-        args: safeArgs, // Save the full payload here (including follower address)
+        args: safeArgs, 
         txHash: txHash ?? null,
         blockNumber: blockNumber ?? null,
 
@@ -55,13 +44,25 @@ export const startIndexer = async () => {
 
   const watch = publicClient.watchContractEvent.bind(publicClient);
 
-  // LeaderRegistered(uint256 indexed leaderId, address indexed leader, string meta)
   watch({
     address: config.CORE_CONTRACT as `0x${string}`,
     abi:  parseAbi(['event LeaderRegistered(uint256 leaderId, address leader, string meta)']),
     eventName: "LeaderRegistered",
     onLogs: async (logs) => {
       for (const l of logs) {
+        const txHash = safeHash(l.transactionHash);
+
+        const alreadyIndexed = await prisma.eventLog.findFirst({
+          where: {
+            event: "LeaderSignal",
+            txHash: txHash,
+          },
+        });
+
+        if (alreadyIndexed) {
+          console.log(`Skipping duplicate LeaderSignal tx ${txHash}`);
+          continue;
+        }
         console.log("log", l)
         let args = l.args as any;
         if (!args) {
@@ -101,13 +102,25 @@ export const startIndexer = async () => {
     },
   });
 
-  // Subscribed(uint256 leaderId, address follower, uint256 amount)
   watch({
     address: config.CORE_CONTRACT as `0x${string}`,
     abi: parseAbi(['event Subscribed(uint256 leaderId, address follower, uint256 amount)']),
     eventName: 'Subscribed',
     onLogs: async (logs) => {
       for (const l of logs) {
+        const txHash = safeHash(l.transactionHash);
+
+        const alreadyIndexed = await prisma.eventLog.findFirst({
+          where: {
+            event: "LeaderSignal",
+            txHash: txHash,
+          },
+        });
+
+        if (alreadyIndexed) {
+          console.log(`Skipping duplicate LeaderSignal tx ${txHash}`);
+          continue;
+        }
         let args = l.args as any;
         if (!args) {
             console.log("⚠️ Args undefined, attempting manual decode...");
@@ -137,7 +150,6 @@ export const startIndexer = async () => {
             } as any,
           });
 
-          // increment counters on leader
           await prisma.leader.updateMany({
             where: { leaderId },
             data: {
@@ -146,7 +158,6 @@ export const startIndexer = async () => {
             },
           });
         } else {
-          // increment deposit
           await prisma.follower.updateMany({
             where: { leaderId, address: followerAddr },
             data: { deposit: { increment: amount } as any, updatedAt: new Date() } as any,
@@ -163,13 +174,25 @@ export const startIndexer = async () => {
     },
   });
 
-  // Unsubscribed
   watch({
   address: config.CORE_CONTRACT as `0x${string}`,
   abi: parseAbi(['event Unsubscribed(uint256 leaderId, address follower, uint256 amount)']),
   eventName: "Unsubscribed",
   onLogs: async (logs) => {
     for (const l of logs) {
+      const txHash = safeHash(l.transactionHash);
+
+        const alreadyIndexed = await prisma.eventLog.findFirst({
+          where: {
+            event: "LeaderSignal",
+            txHash: txHash,
+          },
+        });
+
+        if (alreadyIndexed) {
+          console.log(`Skipping duplicate LeaderSignal tx ${txHash}`);
+          continue;
+        }
       let args = l.args as any;
       if (!args) {
         console.log("⚠️ Args undefined, attempting manual decode...");
@@ -202,14 +225,12 @@ export const startIndexer = async () => {
       } catch (error) {
         console.error(`Failed to unsubscribe follower ${followerAddr} from leader ${leaderId}:`, error);
       }
-      // --- END OF UPDATE ---
 
       await persistEvent("Unsubscribed", args, safeHash(l.transactionHash), safeBlock(l.blockNumber));
     }
   },
 });
 
-  // FollowerMirrored: create position record
   watch({
     address: config.CORE_CONTRACT as `0x${string}`,
     abi: parseAbi(['event FollowerMirrored(uint256 leaderId, address follower, string action, uint256 sizeUsd, bool isLong, uint256 entryPrice, address indexToken)']),
@@ -217,6 +238,19 @@ export const startIndexer = async () => {
     strict: true,
     onLogs: async (logs) => {
       for (const l of logs) {
+        const txHash = safeHash(l.transactionHash);
+
+        const alreadyIndexed = await prisma.eventLog.findFirst({
+          where: {
+            event: "LeaderSignal",
+            txHash: txHash,
+          },
+        });
+
+        if (alreadyIndexed) {
+          console.log(`Skipping duplicate LeaderSignal tx ${txHash}`);
+          continue;
+        }
         let args = l.args as any;
         if (!args || Object.keys(args).length === 0) {
             console.log("⚠️ a undefined, attempting manual decode...");
@@ -243,7 +277,6 @@ export const startIndexer = async () => {
             const sizeUsd = new Prisma.Decimal(
               args.sizeUsd.toString()
             ).div("1e18");
-        // create a Position row for follower
         await prisma.position.create({
           data: {
             leaderId: Number(args.leaderId),
@@ -264,13 +297,25 @@ export const startIndexer = async () => {
     },
   });
 
-  // FollowerPnLSettled: update position and follower deposit reading from chain
   watch({
     address: config.CORE_CONTRACT as `0x${string}`,
     abi: parseAbi(['event FollowerPnLSettled(uint256 leaderId, address follower, int256 pnlUsd)']),
     eventName: "FollowerPnLSettled",
     onLogs: async (logs) => {
       for (const l of logs) {
+        const txHash = safeHash(l.transactionHash);
+
+        const alreadyIndexed = await prisma.eventLog.findFirst({
+          where: {
+            event: "LeaderSignal",
+            txHash: txHash,
+          },
+        });
+
+        if (alreadyIndexed) {
+          console.log(`Skipping duplicate LeaderSignal tx ${txHash}`);
+          continue;
+        }
         let args = l.args as any;
         if (!args) {
             console.log("⚠️ Args undefined, attempting manual decode...");
@@ -285,7 +330,6 @@ export const startIndexer = async () => {
         const leaderId = Number(args.leaderId);
         const followerAddr = args.follower;
 
-        // Find latest open position for follower
         const pos = await prisma.position.findFirst({
           where: { leaderId, follower: followerAddr, isOpen: true },
           orderBy: { id: "desc" },
@@ -297,12 +341,11 @@ export const startIndexer = async () => {
             data: {
               pnlUsd: args.pnlUsd.toString(),
               isOpen: false,
-              exitPrice: pos.entryPrice, // we didn't emit exitPrice; keep entry if unknown
+              exitPrice: pos.entryPrice, 
             } as any,
           });
         }
 
-        // Reconcile follower deposit from on-chain value
         try {
           const depositOnChain = await publicClient.readContract({
             address: config.CORE_CONTRACT as `0x${string}`,
@@ -324,13 +367,25 @@ export const startIndexer = async () => {
     },
   });
 
-  // LeaderFeesAccrued
   watch({
     address: config.CORE_CONTRACT as `0x${string}`,
     abi: parseAbi(['event LeaderFeesAccrued(uint256 leaderid, uint256 amount)']),
     eventName: "LeaderFeesAccrued",
     onLogs: async (logs) => {
       for (const l of logs) {
+        const txHash = safeHash(l.transactionHash);
+
+        const alreadyIndexed = await prisma.eventLog.findFirst({
+          where: {
+            event: "LeaderSignal",
+            txHash: txHash,
+          },
+        });
+
+        if (alreadyIndexed) {
+          console.log(`Skipping duplicate LeaderSignal tx ${txHash}`);
+          continue;
+        }
         let args = l.args as any;
         if (!args) {
             console.log("⚠️ Args undefined, attempting manual decode...");
@@ -361,6 +416,19 @@ export const startIndexer = async () => {
     eventName: "LeaderWithdraw",
     onLogs: async (logs) => {
       for (const l of logs) {
+        const txHash = safeHash(l.transactionHash);
+
+        const alreadyIndexed = await prisma.eventLog.findFirst({
+          where: {
+            event: "LeaderSignal",
+            txHash: txHash,
+          },
+        });
+
+        if (alreadyIndexed) {
+          console.log(`Skipping duplicate LeaderSignal tx ${txHash}`);
+          continue;
+        }
         let args = l.args as any;
         if (!args) {
             console.log("⚠️ Args undefined, attempting manual decode...");
@@ -401,6 +469,19 @@ export const startIndexer = async () => {
     eventName: "LeaderSignal",
     onLogs: async (logs) => {
       for (const l of logs) {
+        const txHash = safeHash(l.transactionHash);
+
+        const alreadyIndexed = await prisma.eventLog.findFirst({
+          where: {
+            event: "LeaderSignal",
+            txHash: txHash,
+          },
+        });
+
+        if (alreadyIndexed) {
+          console.log(`Skipping duplicate LeaderSignal tx ${txHash}`);
+          continue;
+        }
         let args = l.args as any;
         if (!args) {
             console.log("⚠️ Args undefined, attempting manual decode...");
