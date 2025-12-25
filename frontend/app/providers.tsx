@@ -5,6 +5,7 @@ import { hardhat } from "wagmi/chains";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { RainbowKitProvider, getDefaultWallets } from "@rainbow-me/rainbowkit";
 import "@rainbow-me/rainbowkit/styles.css";
+import { ModeProvider } from "./context/ModeContext";
 
 const { wallets } = getDefaultWallets({
   appName: "SyncTrade",
@@ -24,7 +25,9 @@ export default function Providers({ children }: { children: React.ReactNode }) {
   return (
     <WagmiProvider config={config}>
       <QueryClientProvider client={queryClient}>
-        <RainbowKitProvider>{children}</RainbowKitProvider>
+        <RainbowKitProvider>
+          <ModeProvider>{children}</ModeProvider>
+          </RainbowKitProvider>
       </QueryClientProvider>
     </WagmiProvider>
   );

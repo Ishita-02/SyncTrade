@@ -27,7 +27,7 @@ export const upsertLeaderMeta = async (leaderId: number, address: string, meta?:
 };
 
 export const leaderByAddress = async (address: string) => {
-  return prisma.leader.findFirst({
+  return prisma.leader.findMany({
     where: { address: address }
   });
 };

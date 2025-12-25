@@ -63,22 +63,24 @@ export default function PortfolioPage() {
   const { data: selectedDetails } = useQuery({
     queryKey: ["leader-details", activeStrategyId],
     queryFn: () => api<LeaderDetail>(`/leaders/${activeStrategyId}`),
-    enabled: !!activeStrategyId,
+    enabled: activeStrategyId !== null,
   });
 
   // 3. Fetch Leader Positions (When in Leader Mode + ID Selected)
   const { data: leaderPositions, isLoading: leaderLoading } = useQuery({
     queryKey: ["leader-positions", activeStrategyId],
     queryFn: () => api<Position[]>(`/leaders/${activeStrategyId}/positions`),
-    enabled: !!address && viewMode === "leader" && !!activeStrategyId,
+    enabled: !!address && viewMode === "leader" && activeStrategyId !== null,
   });
 
   // 4. Fetch Follower Positions (When in Follower Mode + ID Selected)
   const { data: followerPositions, isLoading: followerLoading } = useQuery({
     queryKey: ["follower-positions", activeStrategyId, address],
     queryFn: () => api<Position[]>(`/leaders/${activeStrategyId}/followers/${address}/positions`),
-    enabled: !!address && viewMode === "follower" && !!activeStrategyId,
+    enabled: !!address && viewMode === "follower" && activeStrategyId !== null,
   });
+
+  console.log("active id", activeStrategyId)
 
   // 5. Determine which list to show
   const positions = (viewMode === "leader" ? leaderPositions : followerPositions) || [];
@@ -125,22 +127,22 @@ export default function PortfolioPage() {
   }
 
   // --- STATE 2: NO STRATEGY SELECTED ---
-  if (!activeStrategyId) {
+  if (activeStrategyId === null) {
      return (
        <div style={{ backgroundColor: "#0f1419", minHeight: "100vh", color: "#e6edf3", padding: "64px 24px", textAlign: "center" }}>
           <div style={{ maxWidth: "400px", margin: "0 auto" }}>
             <h2 style={{ fontSize: "24px", fontWeight: "700", marginBottom: "16px" }}>
-              {viewMode === "leader" ? "Select a Strategy" : "Select a Leader"}
+              {viewMode === "leader" ? "Go to Market" : "Select a Leader"}
             </h2>
             <p style={{ color: "#8b949e", lineHeight: "1.6", marginBottom: "32px" }}>
               {viewMode === "leader" 
-                ? "Please select one of your created strategies from the navbar to view its portfolio and positions."
+                ? "Please create positions from the market to view positions."
                 : "Please select a leader you are following from the navbar to view your mirrored positions."
               }
             </p>
             {viewMode === "leader" && (
-              <Link href="/create-strategy" style={{ display: "inline-flex", alignItems: "center", gap: "8px", backgroundColor: "#238636", color: "white", padding: "12px 24px", borderRadius: "8px", textDecoration: "none", fontWeight: "600" }}>
-                Create New Strategy <ArrowRight size={16} />
+              <Link href="/trade" style={{ display: "inline-flex", alignItems: "center", gap: "8px", backgroundColor: "#238636", color: "white", padding: "12px 24px", borderRadius: "8px", textDecoration: "none", fontWeight: "600" }}>
+                Trade <ArrowRight size={16} />
               </Link>
             )}
           </div>

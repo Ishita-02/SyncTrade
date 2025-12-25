@@ -14,7 +14,7 @@ import { api } from "@/lib/api";
 type Strategy = {
   leaderId: number;
   address: string;
-  meta: string; // The name/description of the strategy
+  meta: string; 
 };
 
 type Leader = {
@@ -50,9 +50,10 @@ export default function Navbar() {
 
   const isLoading = viewMode === "leader" ? isLoadingStrategies : isLoadingFollowed;
 
-  // Optional: Auto-select the first option if none is selected
+  // FIX 1: Strict null check. 
+  // Previously `!activeStrategyId` was true for ID 0, causing it to reset.
   useEffect(() => {
-    if (!activeStrategyId && currentList.length > 0) {
+    if (activeStrategyId === null && currentList.length > 0) {
       setActiveStrategyId(currentList[0].leaderId);
     }
   }, [currentList, activeStrategyId, setActiveStrategyId]);
@@ -137,7 +138,9 @@ export default function Navbar() {
             {/* 2. Context Dropdown (Real Data) */}
             <div style={{ position: "relative", minWidth: "180px" }}>
               <select
-                value={activeStrategyId || ""}
+                // FIX 2: Use Nullish Coalescing (??). 
+                // Previously `|| ""` converted 0 to "", breaking the UI.
+                value={activeStrategyId ?? ""} 
                 onChange={(e) => setActiveStrategyId(Number(e.target.value))}
                 disabled={isLoading || currentList.length === 0}
                 style={{
@@ -146,7 +149,7 @@ export default function Navbar() {
                   backgroundColor: "#161b22",
                   border: "1px solid #30363d",
                   borderRadius: "6px",
-                  padding: "8px 32px 8px 12px", // Extra padding right for arrow
+                  padding: "8px 32px 8px 12px",
                   color: "#e6edf3",
                   fontSize: "13px",
                   cursor: "pointer",
@@ -172,7 +175,6 @@ export default function Navbar() {
                 )}
               </select>
               
-              {/* Custom Arrow Icon overlay */}
               <div style={{ position: "absolute", right: "10px", top: "50%", transform: "translateY(-50%)", pointerEvents: "none", color: "#8b949e" }}>
                 <ChevronDown size={14} />
               </div>

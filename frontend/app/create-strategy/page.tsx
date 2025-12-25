@@ -54,7 +54,6 @@ export default function CreateStrategyPage() {
             break;
           }
         } catch (e) {
-          // Ignore logs that don't match our ABI (e.g. standard ERC20 events)
           continue; 
         }
       }
