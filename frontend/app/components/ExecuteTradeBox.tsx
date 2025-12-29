@@ -116,6 +116,12 @@ export default function ExecuteTradeBox({ market, leaderId }: ExecuteTradeBoxPro
       writeContract({
         address: CORE_CONTRACT,
         abi: CORE_ABI as any,
+        functionName: "settleFollowerPnL",
+        args: [BigInt(leaderId)],
+      });
+      writeContract({
+        address: CORE_CONTRACT,
+        abi: CORE_ABI as any,
         functionName: "leaderClose",
         args: [BigInt(leaderId)],
       });
