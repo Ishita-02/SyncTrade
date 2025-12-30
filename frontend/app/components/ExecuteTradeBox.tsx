@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { Settings, RefreshCw, Wallet, XCircle, AlertTriangle, Lock } from "lucide-react";
 import { api } from "../../lib/api"; 
-import { useWriteContract, useWaitForTransactionReceipt } from "wagmi";
+import { useWriteContract, useWaitForTransactionReceipt, useAccount } from "wagmi";
 import { useTokenBalance } from "../hooks/useTokenBalance";
 import { useTokenPrice } from "../hooks/usePrices";
 import { parseUnits } from "viem";
@@ -27,7 +27,7 @@ interface ExecuteTradeBoxProps {
 
 export default function ExecuteTradeBox({ market, leaderId }: ExecuteTradeBoxProps) {
   const asset = market.split('-')[0]; // Extract "ETH" from "ETH-USD"
-  
+  const { address } = useAccount();
   // Hooks
   const queryClient = useQueryClient();
   const price = useTokenPrice(asset);
@@ -113,12 +113,7 @@ export default function ExecuteTradeBox({ market, leaderId }: ExecuteTradeBoxPro
     setIsProcessing(true); 
 
     try {
-      writeContract({
-        address: CORE_CONTRACT,
-        abi: CORE_ABI as any,
-        functionName: "settleFollowerPnL",
-        args: [BigInt(leaderId)],
-      });
+      
       writeContract({
         address: CORE_CONTRACT,
         abi: CORE_ABI as any,
