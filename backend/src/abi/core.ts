@@ -414,6 +414,11 @@ export const coreABI = [
           "internalType": "uint256",
           "name": "leaderId",
           "type": "uint256"
+        },
+        {
+          "internalType": "uint256",
+          "name": "exitPrice",
+          "type": "uint256"
         }
       ],
       "name": "leaderClose",

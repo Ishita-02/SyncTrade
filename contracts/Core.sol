@@ -149,7 +149,7 @@ contract Core is Ownable, ReentrancyGuard {
         );
     }
 
-    function leaderClose(uint256 leaderId) external onlyLeader(leaderId) nonReentrant {
+    function leaderClose(uint256 leaderId, uint256 exitPrice) external onlyLeader(leaderId) nonReentrant {
         LeaderPosition storage lp = leaderPositions[leaderId];
         require(lp.isOpen, "no open position");
 
@@ -161,7 +161,7 @@ contract Core is Ownable, ReentrancyGuard {
             0,
             lp.isLong,
             lp.indexToken,
-            0 
+            exitPrice 
         );
     }
 
