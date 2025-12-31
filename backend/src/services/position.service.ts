@@ -9,5 +9,7 @@ export const getOpenPositionsForLeader = async (leaderId: number) => {
 };
 
 export const getPositionsForFollower = async (leaderId: number, followerAddress: string) => {
-  return prisma.position.findMany({ where: { leaderId, follower: {address: followerAddress} }, orderBy: { timestamp: "desc" } });
+  console.log(leaderId, followerAddress)
+  const safeAddress = followerAddress.toLowerCase();
+  return prisma.position.findMany({ where: { leaderId, follower: {address: safeAddress} }, orderBy: { timestamp: "desc" } });
 };
