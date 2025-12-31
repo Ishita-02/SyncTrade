@@ -6,7 +6,8 @@ import { api } from "@/lib/api"; // Check your relative path
 import { Wallet, TrendingUp, DollarSign, Activity, ExternalLink, ArrowRight } from "lucide-react";
 import Link from "next/link";
 import { ConnectButton } from "@rainbow-me/rainbowkit";
-import { useMode } from "@/app/context/ModeContext"; // Import Context
+import { useMode } from "@/app/context/ModeContext"; 
+import { usePrices } from "../hooks/usePrices";
 
 // --- TYPES ---
 type Position = {
@@ -53,8 +54,27 @@ function formatUsd(value: string | undefined | null) {
   }).format(num);
 }
 
+function formatPnL(value: number, type: 'usd' | 'percent') {
+  if (value === 0) return "0.00";
+  
+  const absValue = Math.abs(value);
+  
+  if (absValue < 0.01) {
+    return absValue.toLocaleString('en-US', { 
+      minimumFractionDigits: 6, 
+      maximumFractionDigits: 6 
+    });
+  }
+  
+  return absValue.toLocaleString('en-US', { 
+    minimumFractionDigits: 2, 
+    maximumFractionDigits: 2 
+  });
+}
+
 export default function PortfolioPage() {
   const { address, isConnected } = useAccount();
+  const { prices } = usePrices();
   
   // 1. Consume Global Context
   const { viewMode, activeStrategyId } = useMode();
@@ -84,6 +104,7 @@ export default function PortfolioPage() {
 
   // 5. Determine which list to show
   const positions = (viewMode === "leader" ? leaderPositions : followerPositions) || [];
+  console.log("positions", positions)
   const isLoading = viewMode === "leader" ? leaderLoading : followerLoading;
 
   // Calculate Stats
@@ -226,6 +247,8 @@ export default function PortfolioPage() {
                 <th style={{ padding: "16px 24px" }}>Side</th>
                 <th style={{ padding: "16px 24px" }}>Size (USD)</th>
                 <th style={{ padding: "16px 24px" }}>Entry Price</th>
+                <th style={{ padding: "16px 24px" }}>Exit / Mark Price</th>
+                <th style={{ padding: "16px 24px" }}>P&L</th>
                 <th style={{ padding: "16px 24px" }}>Status</th>
                 <th style={{ padding: "16px 24px" }}>Tx</th>
               </tr>
@@ -240,7 +263,33 @@ export default function PortfolioPage() {
                    </td>
                  </tr>
               ) : (
-                positions.map((pos) => (
+                positions.map((pos) => {
+                  const symbol = TOKEN_MAP[pos.indexToken.toLowerCase()] || "ETH";
+                  const entryPrice = Number(pos.entryPrice) / 1e18;
+                  const sizeUsd = Number(pos.sizeUsd) / 1e18;
+                  
+                  let currentPrice = 0;
+                  let pnlUsd = 0;
+                  let pnlPercent = 0;
+
+                  if (!pos.isOpen && pos.exitPrice) {
+                    currentPrice = Number(pos.exitPrice) / 1e18;
+                  } else {
+                    currentPrice = prices?.[symbol as keyof typeof prices]?.price || 0;
+                  }
+
+                  if (entryPrice > 0 && currentPrice > 0) {
+                    const priceDiff = pos.isLong 
+                      ? currentPrice - entryPrice 
+                      : entryPrice - currentPrice;
+                    
+                    pnlUsd = (priceDiff / entryPrice) * sizeUsd;
+                    pnlPercent = (priceDiff / entryPrice) * 100;
+                    console.log("pnl usd and percent", pnlPercent, pnlUsd)
+                  }
+                  
+                  const isPnlPositive = pnlUsd >= 0;
+                  return (
                   <tr key={pos.id} style={{ borderBottom: "1px solid #30363d" }}>
                     {/* 1. Asset Symbol */}
                     <td style={{ padding: "16px 24px", fontWeight: "600" }}>
@@ -271,6 +320,21 @@ export default function PortfolioPage() {
                       {Number(pos.entryPrice) > 0 ? formatUsd(pos.entryPrice) : "-"}
                     </td>
 
+                    <td style={{ padding: "16px 24px", color: "#8b949e" }}>
+                      {Number(pos.exitPrice) > 0 ? formatUsd(pos.exitPrice) : "-"}
+                    </td>
+
+                    <td style={{ padding: "16px 24px" }}>
+                      <div style={{ display: "flex", flexDirection: "column" }}>
+                        <span style={{ color: isPnlPositive ? "#26a641" : "#f85149", fontWeight: 600 }}>
+                          {isPnlPositive ? "+" : "-"}${formatPnL(pnlUsd, 'usd')}
+                        </span>
+                        <span style={{ fontSize: "11px", color: isPnlPositive ? "#26a641" : "#f85149" }}>
+                          {isPnlPositive ? "+" : "-"}{formatPnL(pnlPercent, 'percent')}%
+                        </span>
+                      </div>
+                    </td>
+
                     {/* 5. Status */}
                     <td style={{ padding: "16px 24px" }}>
                        <span style={{ color: pos.isOpen ? "#58a6ff" : "#8b949e" }}>
@@ -290,7 +354,8 @@ export default function PortfolioPage() {
                       </a>
                     </td>
                   </tr>
-                ))
+                );
+                })
               )}
             </tbody>
           </table>

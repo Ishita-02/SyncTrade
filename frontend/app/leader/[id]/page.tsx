@@ -122,7 +122,7 @@ export default function LeaderPage() {
       market: marketInfo?.market ?? "UNKNOWN",
       isLong: p.isLong,
       collateral: sizeUsd,
-      leverage: 1, // Simplified for now
+      leverage: 1, 
       entryPrice,
       currentPrice,
       pnlUsd,
@@ -132,12 +132,12 @@ export default function LeaderPage() {
   });
 
    var totalPnlUsd = allPositions
-    .filter((p) => p.isOpen)
     .reduce((acc, p) => acc + p.pnlUsd, 0);
 
     var totalAmount = allPositions
-    .filter((p) => p.isOpen)
     .reduce((acc, p) => acc + p.collateral, 0);
+
+    console.log("pnl usd", totalAmount)
 
 
   const filteredPositions =
@@ -213,7 +213,7 @@ export default function LeaderPage() {
               </div>
               <div>
                 <div style={{ color: "#8b949e", fontSize: "12px", marginBottom: "2px" }}>Total AUM</div>
-                <div style={{ color: "#e6edf3", fontSize: "20px", fontWeight: "700" }}>${Number(totalAmount.toLocaleString())}</div>
+                <div style={{ color: "#e6edf3", fontSize: "20px", fontWeight: "700" }}>${totalAmount.toLocaleString()}</div>
               </div>
             </div>
           </div>

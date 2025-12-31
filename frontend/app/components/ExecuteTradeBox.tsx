@@ -113,12 +113,14 @@ export default function ExecuteTradeBox({ market, leaderId }: ExecuteTradeBoxPro
     setIsProcessing(true); 
 
     try {
+      const decimals = asset === "USDC" ? 6 : 18;
+      const exitPrice = parseUnits(currentPrice.toString(), decimals);
       
       writeContract({
         address: CORE_CONTRACT,
         abi: CORE_ABI as any,
         functionName: "leaderClose",
-        args: [BigInt(leaderId)],
+        args: [BigInt(leaderId), exitPrice],
       });
       console.log("leaderid", leaderId)
     } catch (error: any) {

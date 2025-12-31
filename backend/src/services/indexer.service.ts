@@ -254,7 +254,7 @@ export const startIndexer = async () => {
         }
         let args = l.args as any;
         if (!args || Object.keys(args).length === 0) {
-            console.log("⚠️ a undefined, attempting manual decode...");
+            console.log("A undefined, attempting manual decode...");
             const decoded = decodeEventLog({
               abi: coreABI,
               data: l.data,

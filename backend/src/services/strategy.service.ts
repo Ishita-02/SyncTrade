@@ -110,19 +110,19 @@ class StrategyService {
       console.log(`\n🔒 [StrategyService] Closing Position`);
       console.log(`   Leader ID: #${leaderId}`);
 
-      const hash = await wc.writeContract({
-        address: config.CORE_CONTRACT,
-        abi: coreABI,
-        functionName: "leaderClose",
-        args: [BigInt(leaderId)],
-      });
+      // const hash = await wc.writeContract({
+      //   address: config.CORE_CONTRACT,
+      //   abi: coreABI,
+      //   functionName: "leaderClose",
+      //   args: [BigInt(leaderId)],
+      // });
 
-      console.log(`✅ Transaction sent: ${hash}`);
+      // console.log(`✅ Transaction sent: ${hash}`);
 
-      const receipt = await publicClient.waitForTransactionReceipt({ hash });
-      console.log(`✅ Confirmed in block ${receipt.blockNumber}\n`);
+      // const receipt = await publicClient.waitForTransactionReceipt({ hash });
+      // console.log(`✅ Confirmed in block ${receipt.blockNumber}\n`);
 
-      return { success: true, txHash: hash, receipt };
+      return { success: true };
     } catch (error: any) {
       console.error("❌ Error closing position:", error);
       throw new Error(`Failed to close position: ${error.message}`);
