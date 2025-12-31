@@ -4,6 +4,7 @@ import {coreABI} from "../abi/core.js";
 import { config } from "../config.js";
 import { parseAbi, decodeEventLog } from 'viem'
 import { Prisma } from "@prisma/client";
+import { walletClient } from "./web3.service.js";
 
 const safeHash = (hash: `0x${string}` | null | undefined): string | undefined =>
   hash ? String(hash) : undefined;
@@ -512,19 +513,18 @@ export const startIndexer = async () => {
               sizeUsd: sizeUsd,
               isOpen: true,
               indexToken: indexToken,
-              entryPrice: price, // Event doesn't emit price, you might need to fetch it or leave 0
+              entryPrice: price,
               txHash: safeHash(l.transactionHash),
               timestamp: new Date(),
             } as any,
           });
         } 
         
-        // CASE 2: Leader CLOSES a position
         else if (action === "CLOSE") {
           const openPos = await prisma.position.findFirst({
             where: {
               leaderId: leaderId,
-              followerId: null, // Ensure we get the leader's row, not a follower's
+              followerId: null, 
               isOpen: true
             },
             orderBy: { id: 'desc' }
@@ -538,6 +538,51 @@ export const startIndexer = async () => {
                 exitPrice: price
               } as any
             });
+
+            const followerPositions = await prisma.position.findMany({
+              where: {
+                leaderId: leaderId,
+                followerId: { not: null }, 
+                isOpen: true
+              },
+              include: { follower: true } 
+            });
+
+            for (const fPos of followerPositions) {
+              if (!fPos.follower?.address) continue;
+
+              const entry = Number(fPos.entryPrice);
+              const size = Number(fPos.sizeUsd);
+              let pnl = 0;
+
+              if (entry > 0) {
+                if (fPos.isLong) {
+                  pnl = ((price - entry) / entry) * size;
+                } else {
+                  pnl = ((entry - price) / entry) * size;
+                }
+              }
+
+              try {
+                console.log(`Settling ${fPos.follower.address} PnL: ${pnl}`);
+                
+                const tx = await walletClient.writeContract({
+                  address: config.CORE_CONTRACT as `0x${string}`,
+                  abi: coreABI,
+                  functionName: "settleFollowerPnL",
+                  args: [
+                    BigInt(leaderId),
+                    fPos.follower.address as `0x${string}`,
+                    BigInt(Math.floor(pnl * 1e18)) 
+                  ]
+                });
+                console.log(`✅ Settled tx: ${tx}`);
+              } catch (err) {
+                console.error(`❌ Failed to settle ${fPos.follower.address}`, err);
+              }
+            }
+          } else {
+            console.warn(`⚠️ Close signal for Leader #${leaderId} but no DB position found.`);
           }
         }
 
