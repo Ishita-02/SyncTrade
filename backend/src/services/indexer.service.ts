@@ -234,24 +234,13 @@ export const startIndexer = async () => {
 
   watch({
     address: config.CORE_CONTRACT as `0x${string}`,
-    abi: parseAbi(['event FollowerMirrored(uint256 leaderId, address follower, string action, uint256 sizeUsd, bool isLong, uint256 entryPrice, address indexToken)']),
+    abi: parseAbi(['event FollowerMirrored(uint256 indexed leaderId, address indexed follower, string action, uint256 sizeUsd, bool isLong, uint256 entryPrice, address indexToken)']),
     eventName: "FollowerMirrored",
     strict: true,
     onLogs: async (logs) => {
       for (const l of logs) {
         const txHash = safeHash(l.transactionHash);
 
-        const alreadyIndexed = await prisma.eventLog.findFirst({
-          where: {
-            event: "LeaderSignal",
-            txHash: txHash,
-          },
-        });
-
-        if (alreadyIndexed) {
-          console.log(`Skipping duplicate LeaderSignal tx ${txHash}`);
-          continue;
-        }
         let args = l.args as any;
         if (!args || Object.keys(args).length === 0) {
             console.log("A undefined, attempting manual decode...");
@@ -263,7 +252,22 @@ export const startIndexer = async () => {
             args = decoded.args;
             console.log(args)
           }
+          console.log("args", args);
           const followerAddress = args.follower.toLowerCase() ;
+          const leaderId = Number(args.leaderId);
+
+          const alreadyIndexed = await prisma.position.findFirst({
+            where: {
+              txHash: txHash,      
+              leaderId: leaderId, 
+              follower: { address: followerAddress } 
+            },
+          });
+
+          if (alreadyIndexed) {
+            console.log(`⏭️ Skipping duplicate FollowerMirrored event for ${followerAddress} (Tx: ${txHash})`);
+            continue;
+          }
            const follower = await prisma.follower.upsert({
             where: { leaderId_address: { leaderId: Number(args.leaderId), address: followerAddress } },
             update: {},
@@ -329,10 +333,10 @@ export const startIndexer = async () => {
             console.log(args)
           }
         const leaderId = Number(args.leaderId);
-        const followerAddr = args.follower;
+        const followerAddr = args.follower.toLowerCase();
 
         const pos = await prisma.position.findFirst({
-          where: { leaderId, follower: followerAddr, isOpen: true },
+          where: { leaderId, follower: {address: followerAddr}, isOpen: true },
           orderBy: { id: "desc" },
         });
 
@@ -340,7 +344,9 @@ export const startIndexer = async () => {
           await prisma.position.update({
             where: { id: pos.id },
             data: {
-              pnlUsd: args.pnlUsd.toString(),
+              pnlUsd: new Prisma.Decimal(
+              args.pnlUsd.toString()
+            ).div("1e18"),
               isOpen: false,
               exitPrice: pos.entryPrice, 
             } as any,
@@ -399,11 +405,12 @@ export const startIndexer = async () => {
             console.log(args)
           }
         const leaderId = Number(args.leaderId);
-        const amount = args.amount?.toString?.() ?? String(args.amount);
-        // increment feesAccrued
+        const amount = new Prisma.Decimal(
+              args.amount.toString()
+            ).div("1e18");
         await prisma.leader.updateMany({
           where: { leaderId },
-          data: { feesAccrued: { increment: amount } as any },
+          data: { feesAccrued: { increment: amount  } as any },
         });
         await persistEvent("LeaderFeesAccrued", args, safeHash(l.transactionHash), safeBlock(l.blockNumber));
       }
@@ -452,18 +459,6 @@ export const startIndexer = async () => {
     },
   });
 
-  // PositionClosed (generic)
-  // watch({
-  //   address: config.CORE_CONTRACT as `0x${string}`,
-  //   abi: parseAbi(['event PositionClosed(uint256 leaderId, address follower)']),
-  //   eventName: "PositionClosed",
-  //   onLogs: async (logs) => {
-  //     for (const l of logs) {
-  //       await persistEvent("PositionClosed", l.args, safeHash(l.transactionHash), safeBlock(l.blockNumber));
-  //     }
-  //   },
-  // });
-
   watch({
     address: config.CORE_CONTRACT as `0x${string}`,
     abi: parseAbi(['event LeaderSignal(uint256 leaderId, string action, uint256 sizeUsd, bool isLong, address indexToken, uint256 entryPrice)']),
@@ -495,11 +490,13 @@ export const startIndexer = async () => {
             console.log(decoded)
           }
         const leaderId = Number(args.leaderId);
-        const action = args.action; // "OPEN_LONG", "OPEN_SHORT", "CLOSE"
-        const sizeUsd = args.sizeUsd.toString();
+        const action = args.action; 
+        const sizeUsd = new Prisma.Decimal(
+              args.sizeUsd.toString()
+            ).div("1e18");;
         const isLong = Boolean(args.isLong);
         const indexToken = args.indexToken;
-        const price = Number(args.entryPrice);
+        const price = args.entryPrice;
 
         console.log(`🔔 Leader Signal: #${leaderId} - ${action}`);
 

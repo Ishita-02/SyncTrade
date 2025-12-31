@@ -100,8 +100,8 @@ export default function LeaderPage() {
     const tokenKey = p.indexToken.toLowerCase();
     const marketInfo = MARKET_MAP[tokenKey];
 
-    const entryPrice = Number(p.entryPrice) / 1e18;
-    const sizeUsd = Number(p.sizeUsd) / 1e18;
+    const entryPrice = Number(p.entryPrice) ;
+    const sizeUsd = Number(p.sizeUsd) ;
 
     const symbol = MARKET_MAP[p.indexToken.toLowerCase()];
     const currentPrice = (prices && symbol?.symbol && (prices as Record<string, any>)[symbol.symbol]?.price) ?? 0;
