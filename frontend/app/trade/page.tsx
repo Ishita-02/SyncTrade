@@ -19,7 +19,6 @@ export default function TradePage() {
   
   // 2. Consume global state
   const { viewMode, activeStrategyId } = useMode();
-  console.log("strategy id", activeStrategyId)
 
   return (
     <div style={{ backgroundColor: "#0f1419", minHeight: "100vh", color: "#e6edf3" }}>
