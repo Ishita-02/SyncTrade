@@ -3,8 +3,9 @@ import prisma from "../db/prisma.js";
 import {coreABI} from "../abi/core.js";
 import { config } from "../config.js";
 import { parseAbi, decodeEventLog } from 'viem'
-import { Prisma } from "@prisma/client";
+// import { Prisma } from "@prisma/client";
 import { walletClient } from "./web3.service.js";
+import { Decimal } from "@prisma/client/runtime/library";
 
 const safeHash = (hash: `0x${string}` | null | undefined): string | undefined =>
   hash ? String(hash) : undefined;
@@ -275,11 +276,11 @@ export const startIndexer = async () => {
           });
  
 
-          const entryPrice = new Prisma.Decimal(
+          const entryPrice = new Decimal(
               args.entryPrice.toString()
             ).div("1e18");
 
-            const sizeUsd = new Prisma.Decimal(
+            const sizeUsd = new Decimal(
               args.sizeUsd.toString()
             ).div("1e18");
         await prisma.position.create({
@@ -344,7 +345,7 @@ export const startIndexer = async () => {
           await prisma.position.update({
             where: { id: pos.id },
             data: {
-              pnlUsd: new Prisma.Decimal(
+              pnlUsd: new Decimal(
               args.pnlUsd.toString()
             ).div("1e18"),
               isOpen: false,
@@ -405,7 +406,7 @@ export const startIndexer = async () => {
             console.log(args)
           }
         const leaderId = Number(args.leaderId);
-        const amount = new Prisma.Decimal(
+        const amount = new Decimal(
               args.amount.toString()
             ).div("1e18");
         await prisma.leader.updateMany({
@@ -491,7 +492,7 @@ export const startIndexer = async () => {
           }
         const leaderId = Number(args.leaderId);
         const action = args.action; 
-        const sizeUsd = new Prisma.Decimal(
+        const sizeUsd = new Decimal(
               args.sizeUsd.toString()
             ).div("1e18");;
         const isLong = Boolean(args.isLong);
