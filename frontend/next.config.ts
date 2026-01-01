@@ -20,6 +20,7 @@ const nextConfig = {
       '@gemini-wallet/core',
       '@react-native-async-storage/async-storage'
     );
+    config.optimization.minimize = false;
 
     return config;
   },
