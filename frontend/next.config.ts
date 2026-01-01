@@ -17,7 +17,8 @@ const nextConfig = {
       'encoding', 
       'why-is-node-running',
       'porto',              
-      '@gemini-wallet/core'
+      '@gemini-wallet/core',
+      '@react-native-async-storage/async-storage'
     );
 
     return config;
