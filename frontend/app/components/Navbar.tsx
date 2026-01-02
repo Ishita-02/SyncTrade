@@ -9,28 +9,20 @@ import { useQuery } from "@tanstack/react-query";
 import { Users, LayoutDashboard, ChevronDown } from "lucide-react";
 import { useMode } from "../context/ModeContext";
 import { api } from "@/lib/api"; 
-import { useConfig } from "wagmi";
 
 
-// --- Types based on your backend ---
 type Strategy = { leaderId: number; address: string; meta: string; };
 type Leader = { leaderId: number; address: string; meta: string; };
 
 export default function Navbar() {
   const pathname = usePathname();
   const { address } = useAccount();
-  const config = useConfig();
-  // console.log("wagmi config", config);
   const { viewMode, setViewMode, activeStrategyId, setActiveStrategyId } = useMode();
 
-  // --- LOGIC: HIDE NAVBAR ON LANDING PAGE ---
-  // If we are on Home ("/"), we return null so this Navbar doesn't show.
-  // The Landing Page has its own separate header.
   if (pathname === "/") {
     return null;
   }
 
-  // --- DATA FETCHING ---
   const { data: strategies, isLoading: isLoadingStrategies } = useQuery({
     queryKey: ["user-strategies", address],
     queryFn: () => api<Strategy[]>(`/strategies/me/${address}`),
@@ -56,7 +48,6 @@ export default function Navbar() {
     }
   }, [currentList, activeStrategyId, setActiveStrategyId]);
 
-  // Helper for Link styling
   const getLinkStyle = (path: string) => {
     const isActive = path === "/" ? pathname === "/" : pathname.startsWith(path);
     return {
@@ -72,7 +63,6 @@ export default function Navbar() {
       <div style={{ maxWidth: "1400px", margin: "0 auto", padding: "0 24px" }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "16px 0" }}>
           
-          {/* LEFT: Logo & Nav */}
           <div style={{ display: "flex", alignItems: "center", gap: "48px" }}>
             <Link href="/" style={{ textDecoration: 'none' }}>
               <h1 style={{ fontSize: "20px", fontWeight: "700", color: "#e6edf3", margin: 0 }}>
@@ -82,16 +72,14 @@ export default function Navbar() {
             
             <nav style={{ display: "flex", gap: "32px" }}>
               <Link href="/trade" style={getLinkStyle("/trade")}>Markets</Link>
-              {/* Corrected Link: Goes to /strategies, NOT / */}
               <Link href="/strategies" style={getLinkStyle("/strategies")}>Strategies</Link>
               <Link href="/portfolio" style={getLinkStyle("/portfolio")}>Portfolio</Link>
+              <Link href="/faucet" style={getLinkStyle("/faucet")}>Faucet</Link>
             </nav>
           </div>
 
-          {/* RIGHT: Wallet & Mode Controls */}
           <div style={{ display: "flex", alignItems: "center", gap: "20px" }}>
             
-            {/* Mode Switcher */}
             <div style={{ backgroundColor: "#21262d", borderRadius: "6px", padding: "4px", display: "flex", border: "1px solid #30363d" }}>
               <button
                 onClick={() => setViewMode("follower")}
@@ -107,7 +95,6 @@ export default function Navbar() {
               </button>
             </div>
 
-            {/* Strategy Dropdown */}
             <div style={{ position: "relative", minWidth: "180px" }}>
               <select
                 value={activeStrategyId ?? ""} 
@@ -125,7 +112,6 @@ export default function Navbar() {
               <div style={{ position: "absolute", right: "10px", top: "50%", transform: "translateY(-50%)", pointerEvents: "none", color: "#8b949e" }}><ChevronDown size={14} /></div>
             </div>
 
-            {/* CONNECT BUTTON (Only shows here!) */}
             <ConnectButton showBalance={false} chainStatus="icon" accountStatus="address" />
           </div>
 
