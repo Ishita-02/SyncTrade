@@ -1,10 +1,10 @@
 import "./globals.css";
+import "@rainbow-me/rainbowkit/styles.css"; 
 import "./styles/ui.css";
 import Providers from "./providers";
 import { Toaster } from "react-hot-toast";
 import type { Metadata } from "next";
 import Navbar from "./components/Navbar";
-
 
 export const metadata: Metadata = {
   title: "SyncTrade",

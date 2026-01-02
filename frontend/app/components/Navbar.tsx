@@ -9,40 +9,40 @@ import { useQuery } from "@tanstack/react-query";
 import { Users, LayoutDashboard, ChevronDown } from "lucide-react";
 import { useMode } from "../context/ModeContext";
 import { api } from "@/lib/api"; 
+import { useConfig } from "wagmi";
+
 
 // --- Types based on your backend ---
-type Strategy = {
-  leaderId: number;
-  address: string;
-  meta: string; 
-};
-
-type Leader = {
-  leaderId: number;
-  address: string;
-  meta: string;
-};
+type Strategy = { leaderId: number; address: string; meta: string; };
+type Leader = { leaderId: number; address: string; meta: string; };
 
 export default function Navbar() {
   const pathname = usePathname();
   const { address } = useAccount();
+  const config = useConfig();
+  // console.log("wagmi config", config);
   const { viewMode, setViewMode, activeStrategyId, setActiveStrategyId } = useMode();
 
-  // 1. Fetch User's Created Strategies (Leader Mode)
+  // --- LOGIC: HIDE NAVBAR ON LANDING PAGE ---
+  // If we are on Home ("/"), we return null so this Navbar doesn't show.
+  // The Landing Page has its own separate header.
+  if (pathname === "/") {
+    return null;
+  }
+
+  // --- DATA FETCHING ---
   const { data: strategies, isLoading: isLoadingStrategies } = useQuery({
     queryKey: ["user-strategies", address],
     queryFn: () => api<Strategy[]>(`/strategies/me/${address}`),
     enabled: !!address && viewMode === "leader",
   });
 
-  // 2. Fetch Leaders the User Follows (Follower Mode)
   const { data: followedLeaders, isLoading: isLoadingFollowed } = useQuery({
     queryKey: ["followed-leaders", address],
     queryFn: () => api<Leader[]>(`/getLeaders/follower/${address}`),
     enabled: !!address && viewMode === "follower",
   });
 
-  // 3. Determine which list to show in the dropdown
   const currentList = useMemo(() => {
     if (viewMode === "leader") return strategies || [];
     return followedLeaders || [];
@@ -50,8 +50,6 @@ export default function Navbar() {
 
   const isLoading = viewMode === "leader" ? isLoadingStrategies : isLoadingFollowed;
 
-  // FIX 1: Strict null check. 
-  // Previously `!activeStrategyId` was true for ID 0, causing it to reset.
   useEffect(() => {
     if (activeStrategyId === null && currentList.length > 0) {
       setActiveStrategyId(currentList[0].leaderId);
@@ -76,110 +74,58 @@ export default function Navbar() {
           
           {/* LEFT: Logo & Nav */}
           <div style={{ display: "flex", alignItems: "center", gap: "48px" }}>
-            <h1 style={{ fontSize: "20px", fontWeight: "700", color: "#e6edf3", margin: 0 }}>
-              SyncTrade
-            </h1>
+            <Link href="/" style={{ textDecoration: 'none' }}>
+              <h1 style={{ fontSize: "20px", fontWeight: "700", color: "#e6edf3", margin: 0 }}>
+                SyncTrade
+              </h1>
+            </Link>
+            
             <nav style={{ display: "flex", gap: "32px" }}>
-              <Link href="/trade" style={getLinkStyle("/trade")}>
-                Markets
-              </Link>
-              <Link href="/" style={getLinkStyle("/")}>
-                Strategies
-              </Link>
-              <Link href="/portfolio" style={getLinkStyle("/portfolio")}>
-                Portfolio
-              </Link>
+              <Link href="/trade" style={getLinkStyle("/trade")}>Markets</Link>
+              {/* Corrected Link: Goes to /strategies, NOT / */}
+              <Link href="/strategies" style={getLinkStyle("/strategies")}>Strategies</Link>
+              <Link href="/portfolio" style={getLinkStyle("/portfolio")}>Portfolio</Link>
             </nav>
           </div>
 
-          {/* RIGHT: Controls */}
+          {/* RIGHT: Wallet & Mode Controls */}
           <div style={{ display: "flex", alignItems: "center", gap: "20px" }}>
             
-            {/* 1. Mode Switcher */}
+            {/* Mode Switcher */}
             <div style={{ backgroundColor: "#21262d", borderRadius: "6px", padding: "4px", display: "flex", border: "1px solid #30363d" }}>
               <button
                 onClick={() => setViewMode("follower")}
-                style={{
-                  backgroundColor: viewMode === "follower" ? "#1f6feb" : "transparent",
-                  color: viewMode === "follower" ? "white" : "#8b949e",
-                  border: "none",
-                  borderRadius: "4px",
-                  padding: "6px 12px",
-                  fontSize: "13px",
-                  fontWeight: "600",
-                  cursor: "pointer",
-                  display: "flex",
-                  alignItems: "center",
-                  gap: "6px"
-                }}
+                style={{ backgroundColor: viewMode === "follower" ? "#1f6feb" : "transparent", color: viewMode === "follower" ? "white" : "#8b949e", border: "none", borderRadius: "4px", padding: "6px 12px", fontSize: "13px", fontWeight: "600", cursor: "pointer", display: "flex", alignItems: "center", gap: "6px" }}
               >
                 <Users size={14} /> Follower
               </button>
               <button
                 onClick={() => setViewMode("leader")}
-                style={{
-                  backgroundColor: viewMode === "leader" ? "#238636" : "transparent",
-                  color: viewMode === "leader" ? "white" : "#8b949e",
-                  border: "none",
-                  borderRadius: "4px",
-                  padding: "6px 12px",
-                  fontSize: "13px",
-                  fontWeight: "600",
-                  cursor: "pointer",
-                  display: "flex",
-                  alignItems: "center",
-                  gap: "6px"
-                }}
+                style={{ backgroundColor: viewMode === "leader" ? "#238636" : "transparent", color: viewMode === "leader" ? "white" : "#8b949e", border: "none", borderRadius: "4px", padding: "6px 12px", fontSize: "13px", fontWeight: "600", cursor: "pointer", display: "flex", alignItems: "center", gap: "6px" }}
               >
                 <LayoutDashboard size={14} /> Leader
               </button>
             </div>
 
-            {/* 2. Context Dropdown (Real Data) */}
+            {/* Strategy Dropdown */}
             <div style={{ position: "relative", minWidth: "180px" }}>
               <select
-                // FIX 2: Use Nullish Coalescing (??). 
-                // Previously `|| ""` converted 0 to "", breaking the UI.
                 value={activeStrategyId ?? ""} 
                 onChange={(e) => setActiveStrategyId(Number(e.target.value))}
                 disabled={isLoading || currentList.length === 0}
-                style={{
-                  appearance: "none",
-                  width: "100%",
-                  backgroundColor: "#161b22",
-                  border: "1px solid #30363d",
-                  borderRadius: "6px",
-                  padding: "8px 32px 8px 12px",
-                  color: "#e6edf3",
-                  fontSize: "13px",
-                  cursor: "pointer",
-                  outline: "none",
-                  opacity: isLoading ? 0.7 : 1
-                }}
+                style={{ appearance: "none", width: "100%", backgroundColor: "#161b22", border: "1px solid #30363d", borderRadius: "6px", padding: "8px 32px 8px 12px", color: "#e6edf3", fontSize: "13px", cursor: "pointer", outline: "none", opacity: isLoading ? 0.7 : 1 }}
               >
-                {isLoading ? (
-                  <option>Loading...</option>
-                ) : currentList.length === 0 ? (
-                  <option value="">
-                    {viewMode === "leader" ? "No Strategies Created" : "No Leaders Followed"}
-                  </option>
-                ) : (
+                {isLoading ? <option>Loading...</option> : currentList.length === 0 ? <option value="">No Strategies</option> : (
                   <>
                     <option value="" disabled>Select {viewMode === "leader" ? "Strategy" : "Leader"}</option>
-                    {currentList.map((item) => (
-                      <option key={item.leaderId} value={item.leaderId}>
-                        {item.meta || `Strategy #${item.leaderId}`}
-                      </option>
-                    ))}
+                    {currentList.map((item) => <option key={item.leaderId} value={item.leaderId}>{item.meta || `Strategy #${item.leaderId}`}</option>)}
                   </>
                 )}
               </select>
-              
-              <div style={{ position: "absolute", right: "10px", top: "50%", transform: "translateY(-50%)", pointerEvents: "none", color: "#8b949e" }}>
-                <ChevronDown size={14} />
-              </div>
+              <div style={{ position: "absolute", right: "10px", top: "50%", transform: "translateY(-50%)", pointerEvents: "none", color: "#8b949e" }}><ChevronDown size={14} /></div>
             </div>
 
+            {/* CONNECT BUTTON (Only shows here!) */}
             <ConnectButton showBalance={false} chainStatus="icon" accountStatus="address" />
           </div>
 
