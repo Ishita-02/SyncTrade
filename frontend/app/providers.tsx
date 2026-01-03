@@ -1,7 +1,7 @@
 "use client";
 
 import { WagmiProvider, createConfig, http } from "wagmi";
-import { hardhat } from "wagmi/chains";
+import { hardhat, arbitrumSepolia } from "wagmi/chains";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { RainbowKitProvider, connectorsForWallets, darkTheme } from "@rainbow-me/rainbowkit";
 import { metaMaskWallet, coinbaseWallet, walletConnectWallet } from "@rainbow-me/rainbowkit/wallets";
@@ -22,9 +22,10 @@ const connectors = connectorsForWallets(
 );
 
 const config = createConfig({
-  chains: [hardhat],
+  chains: [hardhat, arbitrumSepolia],
   transports: {
     [hardhat.id]: http("http://localhost:8545"),
+    [arbitrumSepolia.id]: http("https://sepolia-rollup.arbitrum.io/rpc"),
   },
   connectors,
   ssr: true,
