@@ -124,7 +124,7 @@ export default function LandingPage() {
             />
             <FeatureCard 
               icon={<CheckCircle size={32} className="text-[#2ea043]" />}
-              title="Automated Risk Mgmt"
+              title="Automated Risk Management"
               desc="Set your own stop-losses and take-profit limits. Even if the leader holds a losing trade, your rules protect your capital."
             />
           </div>
