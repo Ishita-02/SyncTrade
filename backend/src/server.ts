@@ -25,7 +25,9 @@ export const startServer = async () => {
   app.register(strategyRoutes, { prefix: "/api" });
   app.register(priceRoutes, { prefix: "/api" });
 
+  app.get("/health", async () => ({ ok: true }));
+
   const port = config.PORT;
-  await app.listen({ port });
+  await app.listen({ port, host: "0.0.0.0" });
   console.log(`🚀 Server running at http://localhost:${port}`);
 };
