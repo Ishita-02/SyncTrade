@@ -1,4 +1,3 @@
-import fetch from "node-fetch";
 
 type Candle = {
   time: number;
@@ -16,7 +15,11 @@ class PriceService {
   ): Promise<Candle[]> {
     const url = `https://api.binance.com/api/v3/klines?symbol=${symbol}&interval=${interval}&limit=${limit}`;
 
-    const res = await fetch(url);
+    const res = await fetch(url, {
+      headers: {
+        "User-Agent": "Mozilla/5.0"
+      }
+    });
     if (!res.ok) {
       throw new Error("Failed to fetch candles from Binance");
     }
