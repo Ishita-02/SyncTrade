@@ -39,7 +39,7 @@ export default function SubscribeBox({ leaderId }: { leaderId: number }) {
 
       toast.loading("Submitting subscription...", { id: "subscribe" });
       await writeContract({
-        address: "0x5fbdb2315678afecb367f032d93f642f64180aa3",
+        address: "0x0cb06d17db9a5eee2ffc278c1cc7a4f27cecfa6d",
         abi: ERC20_ABI,
         functionName: "approve",
         args: [CORE_CONTRACT, amount],
