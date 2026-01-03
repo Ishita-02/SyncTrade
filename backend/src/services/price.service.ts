@@ -13,21 +13,40 @@ class PriceService {
     interval: string,
     limit: number
   ): Promise<Candle[]> {
-    const url = `https://api.binance.com/api/v3/klines?symbol=${symbol}&interval=${interval}&limit=${limit}`;
+    const url =
+      `https://api.binance.com/api/v3/klines` +
+      `?symbol=${symbol}&interval=${interval}&limit=${limit}`;
 
-    const res = await fetch(url, {
-      headers: {
-        "User-Agent": "Mozilla/5.0"
-      }
-    });
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 10_000);
+
+    let res: Response;
+
+    try {
+      res = await fetch(url, {
+        signal: controller.signal,
+        headers: {
+          "User-Agent": "Mozilla/5.0",
+          "Accept": "application/json",
+        },
+      });
+    } catch (err) {
+      console.error("Fetch failed:", err);
+      throw new Error("Binance fetch failed (network / blocked)");
+    } finally {
+      clearTimeout(timeout);
+    }
+
     if (!res.ok) {
-      throw new Error("Failed to fetch candles from Binance");
+      const text = await res.text();
+      console.error("Binance response error:", res.status, text);
+      throw new Error(`Binance error ${res.status}: ${text}`);
     }
 
     const data = (await res.json()) as any[];
 
     return data.map((candle) => ({
-      time: Math.floor(candle[0] / 1000), // unix seconds
+      time: Math.floor(candle[0] / 1000),
       open: Number(candle[1]),
       high: Number(candle[2]),
       low: Number(candle[3]),
@@ -35,5 +54,6 @@ class PriceService {
     }));
   }
 }
+
 
 export const priceService = new PriceService();
