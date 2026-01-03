@@ -29,6 +29,7 @@
     "viem": "^2.41.2"
   },
   "devDependencies": {
+    "@types/node": "^25.0.3",
     "@types/node-fetch": "^2.6.13"
   }
 }
