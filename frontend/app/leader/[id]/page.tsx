@@ -350,7 +350,7 @@ export default function LeaderPage() {
             
             {/* Filter Buttons */}
             <div style={{ display: "flex", gap: "6px" }}>
-              {["All", "ETH", "BTC", "SOL"].map((market) => (
+              {["All", "ETH", "BTC", "UNI"].map((market) => (
                 <button
                   key={market}
                   onClick={() => setMarketFilter(market)}

@@ -36,65 +36,98 @@ export default function CandlestickChart({ symbol }: CandlestickChartProps) {
   const BACKEND = process.env.NEXT_PUBLIC_BACKEND_URL!;
 
   useEffect(() => {
-    async function fetchCandles() {
-      if (!symbol) return;
-      
-      setLoading(true);
-      
-      const intervalMap: Record<string, string> = {
-        "1H": "1h",
-        "4H": "4h",
-        "1D": "1d",
-        "1W": "1w",
-      };
+  async function fetchCandles() {
+    if (!symbol) return;
 
-      const interval = intervalMap[timeframe] ?? "1d";
+    setLoading(true);
 
-      // 2. Format symbol for API (ETH-USD -> ETHUSDT)
-      // If your backend strictly needs "ETHUSDT", we replace "-USD" with "USDT"
-      const apiSymbol = symbol.replace("-USD", "USDT");
+    // ✅ Symbol → CoinGecko ID
+    const COINGECKO_MAP: Record<string, string> = {
+      "ETH-USD": "ethereum",
+      "BTC-USD": "bitcoin",
+      "UNI-USD": "uniswap",
+      "LINK-USD": "chainlink",
+      "ARB-USD": "arbitrum",
+    };
 
-      try {
-        const res = await fetch(
-          `${BACKEND}/api/prices/candles?symbol=${apiSymbol}&interval=${interval}&limit=200`
-        );
+    const coinId = COINGECKO_MAP[symbol];
+    if (!coinId) {
+      console.warn("Unsupported symbol:", symbol);
+      setAllData([]);
+      setLoading(false);
+      return;
+    }
 
-        if (!res.ok) throw new Error("Network response was not ok");
+    // ✅ Timeframe → days
+    const daysMap: Record<string, number> = {
+      "1H": 1,
+      "4H": 7,
+      "1D": 30,
+      "1W": 365,
+    };
 
-        const raw = await res.json();
-        
-        // Safety check if raw data is empty or not an array
-        if (!Array.isArray(raw)) {
-           console.warn("Invalid data format received");
-           setAllData([]);
-           return;
+    const days = daysMap[timeframe] ?? 30;
+
+    try {
+      const res = await fetch(
+        `https://api.coingecko.com/api/v3/coins/${coinId}/market_chart?vs_currency=usd&days=${days}`,
+        {
+          headers: {
+            Accept: "application/json",
+          },
         }
+      );
 
-        const formatted: CandleData[] = raw.map((c: any) => ({
-          timestamp: c.time * 1000,
-          date: new Date(c.time * 1000).toLocaleDateString("en-US", {
+      if (!res.ok) throw new Error("Failed to fetch CoinGecko data");
+
+      const json = await res.json();
+
+      if (!json.prices || !Array.isArray(json.prices)) {
+        setAllData([]);
+        return;
+      }
+
+      // ✅ Convert price series → candles
+      const prices = json.prices;
+
+      const candles: CandleData[] = [];
+
+      for (let i = 1; i < prices.length; i++) {
+        const [time, price] = prices[i];
+        const prevPrice = prices[i - 1][1];
+
+        const open = prevPrice;
+        const close = price;
+        const high = Math.max(open, close);
+        const low = Math.min(open, close);
+
+        candles.push({
+          timestamp: time,
+          date: new Date(time).toLocaleDateString("en-US", {
             month: "short",
             day: "numeric",
           }),
-          open: c.open,
-          high: c.high,
-          low: c.low,
-          close: c.close,
+          open,
+          high,
+          low,
+          close,
           volume: 0,
-        }));
-
-        setAllData(formatted);
-        setBrushDomain(null); // Reset zoom on new symbol load
-      } catch (error) {
-        console.error("Failed to fetch candles:", error);
-        setAllData([]);
-      } finally {
-        setLoading(false);
+        });
       }
-    }
 
-    fetchCandles();
-  }, [timeframe, BACKEND, symbol]); // 3. Re-run when symbol changes
+      setAllData(candles);
+      setBrushDomain(null);
+    } catch (err) {
+      console.error("CoinGecko FE fetch failed:", err);
+      setAllData([]);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  fetchCandles();
+}, [symbol, timeframe]);
+
 
   // Loading State
   if (loading || !allData.length) {
