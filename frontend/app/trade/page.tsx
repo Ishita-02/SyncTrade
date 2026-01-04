@@ -3,21 +3,18 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useAccount } from "wagmi";
-// 1. Import the Context
 import { useMode } from "../context/ModeContext"; 
 
-// Components
 import CandlestickChart from "../components/CandleStickChart";
 import ExecuteTradeBox from "../components/ExecuteTradeBox";
-import { ShieldCheck, LineChart } from "lucide-react"; // Optional icons
+import { ShieldCheck, LineChart } from "lucide-react"; 
 
 export default function TradePage() {
   const [activeMarket, setActiveMarket] = useState("ETH-USD");
-  const markets = ["ETH-USD", "BTC-USD", "SOL-USD", "ARB-USD", "LINK-USD"];
+  const markets = ["ETH-USD", "BTC-USD", "UNI-USD", "ARB-USD", "LINK-USD"];
 
   const { isConnected } = useAccount();
   
-  // 2. Consume global state
   const { viewMode, activeStrategyId } = useMode();
 
   return (
@@ -25,7 +22,6 @@ export default function TradePage() {
 
       <div style={{ maxWidth: "1400px", margin: "0 auto", padding: "32px 24px" }}>
         
-        {/* MARKET SELECTOR SECTION */}
         <div style={{ marginBottom: "24px" }}>
           <h2 style={{ color: "#e6edf3", fontSize: "28px", fontWeight: "700", marginBottom: "16px" }}>
              Trade Markets
@@ -53,10 +49,8 @@ export default function TradePage() {
           </div>
         </div>
 
-        {/* TRADING INTERFACE */}
         <div style={{ display: "flex", gap: "24px", flexDirection: "row", alignItems: "stretch", minHeight: "600px" }}>
           
-          {/* LEFT SIDE: CANDLESTICK CHART */}
           <div style={{ 
             flex: "1", 
             backgroundColor: "#161b22", 
@@ -72,7 +66,6 @@ export default function TradePage() {
             </div>
           </div>
 
-          {/* RIGHT SIDE: CONTEXT AWARE PANEL */}
           <div style={{ 
             width: "380px", 
             backgroundColor: "#161b22", 
@@ -83,7 +76,6 @@ export default function TradePage() {
             flexDirection: "column"
           }}>
              
-             {/* CASE 1: NOT CONNECTED */}
              {!isConnected ? (
                <div style={{ textAlign: "center", marginTop: "40px", color: "#f85149" }}>
                  <p style={{ fontWeight: "600", marginBottom: "8px" }}>Wallet Not Connected</p>
@@ -91,7 +83,6 @@ export default function TradePage() {
                </div>
              ) : (
                <>
-                  {/* CASE 2: FOLLOWER MODE */}
                   {viewMode === "follower" ? (
                     <div>
                       <h3 style={{ color: "#e6edf3", fontSize: "18px", fontWeight: "600", marginBottom: "24px", display: "flex", alignItems: "center", gap: "8px" }}>
@@ -134,7 +125,6 @@ export default function TradePage() {
                       )}
                     </div>
                   ) : (
-                    /* CASE 3: LEADER MODE */
                     <div>
                        <h3 style={{ color: "#e6edf3", fontSize: "18px", fontWeight: "600", marginBottom: "24px", display: "flex", alignItems: "center", gap: "8px" }}>
                          <LineChart size={20} color="#238636" /> Open Position
@@ -151,7 +141,6 @@ export default function TradePage() {
                            </Link>
                          </div>
                        ) : (
-                         /* SHOW EXECUTE TRADE BOX */
                          <ExecuteTradeBox market={activeMarket} leaderId={activeStrategyId} />
                        )}
                     </div>

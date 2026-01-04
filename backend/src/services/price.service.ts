@@ -1,31 +1,67 @@
 
 type Candle = {
-  time: number;
+  time: number;   // unix seconds
   open: number;
   high: number;
   low: number;
   close: number;
 };
 
-class PriceService {
+const BINANCE_FAPI_BASE = "https://fapi.binance.com/fapi/v1/klines";
+
+const COINCAP_ASSET_MAP: Record<string, string> = {
+  BTCUSDT: "bitcoin",
+  ETHUSDT: "ethereum",
+  ARBUSDT: "arbitrum",
+  LINKUSDT: "chainlink",
+  UNIUSDT: "uniswap",
+  WBTCUSDT: "wrapped-bitcoin",
+};
+
+// Supported interval mapping
+const INTERVAL_MAP: Record<string, string> = {
+  "1m": "1m",
+  "5m": "5m",
+  "15m": "15m",
+  "1h": "1h",
+  "4h": "4h",
+  "1d": "1d",
+};
+
+export class PriceService {
   async getCandles(
     symbol: string,
     interval: string,
     limit: number
   ): Promise<Candle[]> {
     try {
-      // Try Binance first
       return await this.getBinanceCandles(symbol, interval, limit);
-    } catch (err) {
-      console.log("Binance failed, using CoinCap fallback");
-      // Fallback to CoinCap
+    } catch (binanceError) {
+      console.error("❌ Binance failed:", binanceError);
+      console.log("↪️ Falling back to CoinCap");
       return await this.getCoinCapCandles(symbol, interval, limit);
     }
   }
 
-  private async getBinanceCandles(symbol: string, interval: string, limit: number): Promise<Candle[]> {
-    const url = `https://api.binance.com/api/v3/klines?symbol=${symbol}&interval=${interval}&limit=${limit}`;
-    
+  // ============================================================
+  // BINANCE (USD-M FUTURES — SERVER SAFE)
+  // ============================================================
+  private async getBinanceCandles(
+    symbol: string,
+    interval: string,
+    limit: number
+  ): Promise<Candle[]> {
+    const mappedInterval = INTERVAL_MAP[interval];
+    if (!mappedInterval) {
+      throw new Error(`Unsupported interval: ${interval}`);
+    }
+
+    const url =
+      `${BINANCE_FAPI_BASE}` +
+      `?symbol=${symbol}` +
+      `&interval=${mappedInterval}` +
+      `&limit=${limit}`;
+
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 10_000);
 
@@ -33,14 +69,17 @@ class PriceService {
       const res = await fetch(url, {
         signal: controller.signal,
         headers: {
-          "User-Agent": "Mozilla/5.0",
-          "Accept": "application/json",
+          Accept: "application/json",
         },
       });
 
-      if (!res.ok) throw new Error(`Binance ${res.status}`);
+      if (!res.ok) {
+        const text = await res.text();
+        throw new Error(`Binance ${res.status}: ${text}`);
+      }
 
       const data = (await res.json()) as any[];
+
       return data.map((candle) => ({
         time: Math.floor(candle[0] / 1000),
         open: Number(candle[1]),
@@ -53,35 +92,63 @@ class PriceService {
     }
   }
 
-  private async getCoinCapCandles(symbol: string, interval: string, limit: number): Promise<Candle[]> {
-    // Convert ETHUSDT to eth
-    const coinId = symbol.replace('USDT', '').toLowerCase();
-    
-    // CoinCap doesn't have candles, so generate from price history
-    const url = `https://api.coincap.io/v2/assets/${coinId}/history?interval=d1`;
-    
+  // ============================================================
+  // COINCAP FALLBACK (HISTORICAL PRICE → SYNTHETIC OHLC)
+  // ============================================================
+  private async getCoinCapCandles(
+    symbol: string,
+    interval: string,
+    limit: number
+  ): Promise<Candle[]> {
+    const assetId = COINCAP_ASSET_MAP[symbol];
+    if (!assetId) {
+      throw new Error(`CoinCap asset not mapped for ${symbol}`);
+    }
+
+    // CoinCap only supports daily/hourly history
+    const coincapInterval =
+      interval === "1d" || interval === "4h" ? "d1" : "h1";
+
+    const url =
+      `https://api.coincap.io/v2/assets/${assetId}/history` +
+      `?interval=${coincapInterval}`;
+
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 10_000);
 
     try {
       const res = await fetch(url, {
         signal: controller.signal,
+        headers: {
+          Accept: "application/json",
+        },
       });
 
-      if (!res.ok) throw new Error(`CoinCap ${res.status}`);
+      if (!res.ok) {
+        const text = await res.text();
+        throw new Error(`CoinCap ${res.status}: ${text}`);
+      }
 
       const json = await res.json();
-      const data = json.data.slice(-limit);
+      const points = json.data.slice(-limit);
 
-      return data.map((point: any) => {
+      return points.map((point: any) => {
         const price = Number(point.priceUsd);
-        const variation = price * 0.02; // 2% variation for mock OHLC
+
+        // Controlled OHLC synthesis (±1.5%)
+        const variation = price * 0.015;
+
+        const open = price + (Math.random() - 0.5) * variation;
+        const close = price;
+        const high = Math.max(open, close) + Math.random() * variation;
+        const low = Math.min(open, close) - Math.random() * variation;
+
         return {
           time: Math.floor(new Date(point.time).getTime() / 1000),
-          open: price * (0.98 + Math.random() * 0.04),
-          high: price * (1 + Math.random() * 0.02),
-          low: price * (1 - Math.random() * 0.02),
-          close: price,
+          open,
+          high,
+          low,
+          close,
         };
       });
     } finally {
@@ -89,6 +156,7 @@ class PriceService {
     }
   }
 }
+
 
 
 export const priceService = new PriceService();

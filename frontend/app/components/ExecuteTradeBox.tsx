@@ -10,7 +10,6 @@ import { parseUnits } from "viem";
 import { CORE_ABI } from "@/lib/contracts";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 
-// --- TYPES ---
 type Position = {
   id: number;
   isOpen: boolean;
@@ -21,66 +20,59 @@ type Position = {
 };
 
 interface ExecuteTradeBoxProps {
-  market: string;   // e.g., "ETH-USD"
+  market: string;   
   leaderId: number; 
 }
 
 export default function ExecuteTradeBox({ market, leaderId }: ExecuteTradeBoxProps) {
-  const asset = market.split('-')[0]; // Extract "ETH" from "ETH-USD"
+  const asset = market.split('-')[0]; 
   const { address } = useAccount();
-  // Hooks
   const queryClient = useQueryClient();
   const price = useTokenPrice(asset);
   const currentPrice = price.price;
   const usdcToken = process.env.NEXT_PUBLIC_USDC as `0x${string}` | undefined;
   const walletBalance = useTokenBalance(usdcToken);
 
-  // UI State
   const [side, setSide] = useState<"Long" | "Short">("Long");
   const [collateral, setCollateral] = useState("");
   const [leverage, setLeverage] = useState(1.1);
   const [isProcessing, setIsProcessing] = useState(false);
   const [statusMessage, setStatusMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null);
 
-  // Contract Config
   const CORE_CONTRACT = process.env.NEXT_PUBLIC_CORE_CONTRACT as `0x${string}`;
   const TOKEN_MAP: Record<string, string> = {
     "ETH": process.env.NEXT_PUBLIC_WETH || "",
     "BTC": process.env.NEXT_PUBLIC_WBTC || "",
     "USDC": process.env.NEXT_PUBLIC_USDC || "",
+    "UNI": process.env.NEXT_PUBLIC_UNI || "",
+    "ARB": process.env.NEXT_PUBLIC_ARB || "",
+    "LINK": process.env.NEXT_PUBLIC_LINK || ""
   };
 
-  // --- 1. FETCH POSITIONS ---
-  // We check if this strategy (leaderId) already has an open position
   const { data: positions, isLoading: isLoadingPositions } = useQuery({
     queryKey: ["leader-positions", leaderId],
     queryFn: () => api<Position[]>(`/leaders/${leaderId}/positions`),
     enabled: leaderId !== null, 
   });
 
-  // Find the single active position (if any)
   const activePosition = positions?.find((p) => p.isOpen);
 
-  // --- CONTRACT WRITES ---
   const { writeContract, data: hash, error: writeError } = useWriteContract();
   const { isLoading: isConfirming, isSuccess } = useWaitForTransactionReceipt({ hash });
 
-  // --- EFFECTS ---
   useEffect(() => {
     if (isSuccess) {
       setStatusMessage({ type: 'success', text: "Transaction Confirmed on Blockchain!" });
       setCollateral("");
       setIsProcessing(false);
-      // Refresh positions to update UI (hide/show warning)
       queryClient.invalidateQueries({ queryKey: ["leader-positions", leaderId] });
     }
     if (writeError) {
-       setStatusMessage({ type: 'error', text: writeError.message.split('\n')[0] }); // Simple error msg
+       setStatusMessage({ type: 'error', text: writeError.message.split('\n')[0] }); 
        setIsProcessing(false);
     }
   }, [isSuccess, writeError, queryClient, leaderId]);
 
-  // --- HANDLERS ---
   const handleOpenPosition = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!collateral) return;
@@ -130,7 +122,6 @@ export default function ExecuteTradeBox({ market, leaderId }: ExecuteTradeBoxPro
     }
   };
 
-  // --- CALCS ---
   const collateralVal = parseFloat(collateral) || 0;
   const positionSize = collateralVal * leverage; 
   const openFee = positionSize * 0.001; 
@@ -142,12 +133,10 @@ export default function ExecuteTradeBox({ market, leaderId }: ExecuteTradeBoxPro
     : currentPrice * (1 + (1/leverage) * liqThreshold);
 
 
-  // --- RENDER: LOADING ---
   if (isLoadingPositions) {
      return <div style={{ padding: "24px", textAlign: "center", color: "#8b949e", backgroundColor: "#161b22", borderRadius: "12px", border: "1px solid #30363d" }}>Loading strategy data...</div>;
   }
 
-  // --- RENDER: ACTIVE POSITION WARNING (The "Beautiful Warning") ---
   if (activePosition) {
     return (
       <div style={{
@@ -161,7 +150,6 @@ export default function ExecuteTradeBox({ market, leaderId }: ExecuteTradeBoxPro
         flexDirection: "column",
         gap: "24px"
       }}>
-        {/* Warning Banner */}
         <div style={{
           backgroundColor: "rgba(210, 153, 34, 0.15)",
           border: "1px solid rgba(210, 153, 34, 0.4)",
@@ -180,7 +168,6 @@ export default function ExecuteTradeBox({ market, leaderId }: ExecuteTradeBoxPro
           </div>
         </div>
 
-        {/* Current Position Summary */}
         <div>
            <div style={{ fontSize: "12px", color: "#8b949e", marginBottom: "8px", textTransform: "uppercase", fontWeight: "600", letterSpacing: "0.5px" }}>Active Position</div>
            <div style={{ 
@@ -212,7 +199,6 @@ export default function ExecuteTradeBox({ market, leaderId }: ExecuteTradeBoxPro
            </div>
         </div>
 
-        {/* Status Message */}
         {statusMessage && (
           <div style={{ 
             padding: "10px", borderRadius: "6px", fontSize: "13px",
@@ -224,7 +210,6 @@ export default function ExecuteTradeBox({ market, leaderId }: ExecuteTradeBoxPro
           </div>
         )}
 
-        {/* Close Button */}
         <button 
           onClick={handleClosePosition}
           disabled={isProcessing || isConfirming}
@@ -241,7 +226,6 @@ export default function ExecuteTradeBox({ market, leaderId }: ExecuteTradeBoxPro
     );
   }
 
-  // --- RENDER: OPEN POSITION FORM (Standard) ---
   return (
     <div style={{
       backgroundColor: "#161b22",
@@ -253,7 +237,6 @@ export default function ExecuteTradeBox({ market, leaderId }: ExecuteTradeBoxPro
       maxWidth: "100%"
     }}>
       
-      {/* HEADER */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px" }}>
         <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
           <span style={{ fontSize: "15px", fontWeight: "600" }}>Trade {market}</span>
@@ -266,7 +249,6 @@ export default function ExecuteTradeBox({ market, leaderId }: ExecuteTradeBoxPro
 
       <form onSubmit={handleOpenPosition}>
         
-        {/* MARKET INFO */}
         <div style={{ marginBottom: "16px" }}>
           <label style={{ fontSize: "12px", color: "#8b949e", marginBottom: "6px", display: "block" }}>Market</label>
           <div style={{ 
@@ -274,14 +256,12 @@ export default function ExecuteTradeBox({ market, leaderId }: ExecuteTradeBoxPro
             display: "flex", justifyContent: "space-between", alignItems: "center"
           }}>
             <div style={{ display: "flex", alignItems: "center", gap: "8px", fontWeight: "600" }}>
-              {/* Optional: Add icon logic here */}
               <span>{market}</span>
             </div>
             <span style={{ fontSize: "14px", color: "#3fb950" }}>${currentPrice.toLocaleString()}</span>
           </div>
         </div>
 
-        {/* SIDE SELECTOR */}
         <div style={{ display: "flex", backgroundColor: "#0d1117", padding: "4px", borderRadius: "8px", marginBottom: "20px", border: "1px solid #30363d" }}>
           <button type="button" onClick={() => setSide("Long")} style={{
             flex: 1, padding: "8px", borderRadius: "6px", fontSize: "14px", fontWeight: "600",
@@ -295,7 +275,6 @@ export default function ExecuteTradeBox({ market, leaderId }: ExecuteTradeBoxPro
           }}>Short</button>
         </div>
 
-        {/* COLLATERAL */}
         <div style={{ marginBottom: "20px" }}>
           <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "6px", fontSize: "12px", color: "#8b949e" }}>
             <span>Pay</span>
@@ -319,7 +298,6 @@ export default function ExecuteTradeBox({ market, leaderId }: ExecuteTradeBoxPro
           </div>
         </div>
 
-        {/* LEVERAGE */}
         <div style={{ marginBottom: "24px" }}>
           <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "10px", fontSize: "12px" }}>
             <span style={{ color: "#8b949e" }}>Leverage</span>
@@ -332,7 +310,6 @@ export default function ExecuteTradeBox({ market, leaderId }: ExecuteTradeBoxPro
           />
         </div>
 
-        {/* SUMMARY */}
         <div style={{ backgroundColor: "#0d1117", border: "1px solid #30363d", borderRadius: "8px", padding: "12px", marginBottom: "20px", fontSize: "12px" }}>
           <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "8px" }}>
             <span style={{ color: "#8b949e" }}>Liq. Price</span>
@@ -349,7 +326,6 @@ export default function ExecuteTradeBox({ market, leaderId }: ExecuteTradeBoxPro
           </div>
         </div>
 
-        {/* STATUS MSG */}
         {statusMessage && (
           <div style={{ 
             marginBottom: "16px", padding: "10px", borderRadius: "6px", fontSize: "13px",
@@ -361,7 +337,6 @@ export default function ExecuteTradeBox({ market, leaderId }: ExecuteTradeBoxPro
           </div>
         )}
 
-        {/* SUBMIT BUTTON */}
         <button 
           disabled={isProcessing || isConfirming || collateralVal <= 0}
           style={{
