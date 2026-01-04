@@ -19,6 +19,7 @@ export default function FaucetPage() {
 
   const handleClaim = async () => {
     if (!isConnected || !selectedToken.address) return;
+    console.log("selected token", selectedToken)
     
     writeContract({
       address: process.env.NEXT_PUBLIC_FAUCET_CONTRACT as `0x${string}`,

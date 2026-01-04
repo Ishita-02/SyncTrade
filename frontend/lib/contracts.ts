@@ -10,10 +10,10 @@ export const ERC20_ABI = erc20Abi as any;
 export const FAUCET_ABI = faucetAbi as any;
 
 export const FAUCET_TOKENS = [
-  { symbol: "USDC", address: process.env.NEXT_PUBLIC_MOCK_USDC as `0x${string}` },
-  { symbol: "WETH", address: process.env.NEXT_PUBLIC_MOCK_WETH as `0x${string}` },
-  { symbol: "WBTC", address: process.env.NEXT_PUBLIC_MOCK_WBTC as `0x${string}` },
-  { symbol: "UNI",  address: process.env.NEXT_PUBLIC_MOCK_UNI as `0x${string}` },
-  { symbol: "ARB",  address: process.env.NEXT_PUBLIC_MOCK_ARB as `0x${string}` },
-  { symbol: "LINK", address: process.env.NEXT_PUBLIC_MOCK_LINK as `0x${string}` },
+  { symbol: "USDC", address: process.env.NEXT_PUBLIC_USDC as `0x${string}` },
+  { symbol: "WETH", address: process.env.NEXT_PUBLIC_WETH as `0x${string}` },
+  { symbol: "WBTC", address: process.env.NEXT_PUBLIC_WBTC as `0x${string}` },
+  { symbol: "UNI",  address: process.env.NEXT_PUBLIC_UNI as `0x${string}` },
+  { symbol: "ARB",  address: process.env.NEXT_PUBLIC_ARB as `0x${string}` },
+  { symbol: "LINK", address: process.env.NEXT_PUBLIC_LINK as `0x${string}` },
 ];

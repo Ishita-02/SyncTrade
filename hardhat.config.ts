@@ -17,7 +17,7 @@ const config: HardhatUserConfig = {
     },
     arbitrum_sepolia: {
       url: "https://sepolia-rollup.arbitrum.io/rpc",
-      accounts: [""]
+      accounts: ["0xddc1aeec0aa629e7901f9854cbdf36a7b77c9c464773a6b87e63b89ae28a5613"]
     }
   }
 };
