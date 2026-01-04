@@ -1,3 +1,5 @@
+import axios from "axios";
+
 type Candle = {
   time: number;
   open: number;
@@ -15,6 +17,7 @@ const COINGECKO_MAP: Record<string, string> = {
   WBTCUSDT: "wrapped-bitcoin",
 };
 
+// Interval → valid CoinGecko days
 function mapIntervalToDays(interval: string): number {
   switch (interval) {
     case "1m":
@@ -31,6 +34,7 @@ function mapIntervalToDays(interval: string): number {
   }
 }
 
+// In-memory cache
 const CACHE = new Map<string, { ts: number; data: Candle[] }>();
 const CACHE_TTL = 60_000; 
 
@@ -40,24 +44,24 @@ export class PriceService {
     interval: string,
     limit: number
   ): Promise<Candle[]> {
-    const cacheKey = `${symbol}-${interval}-${limit}`;
-    const cached = CACHE.get(cacheKey);
+    const key = `${symbol}-${interval}-${limit}`;
+    const cached = CACHE.get(key);
 
     if (cached && Date.now() - cached.ts < CACHE_TTL) {
       return cached.data;
     }
 
     try {
-      const data = await this.getCoinGeckoCandles(symbol, interval, limit);
-      CACHE.set(cacheKey, { ts: Date.now(), data });
+      const data = await this.fetchFromCoinGecko(symbol, interval, limit);
+      CACHE.set(key, { ts: Date.now(), data });
       return data;
     } catch (err) {
-      console.error("❌ CoinGecko failed:", err);
-      return [];
+      console.error("❌ CoinGecko failed in prod:", err);
+      return []; 
     }
   }
 
-  private async getCoinGeckoCandles(
+  private async fetchFromCoinGecko(
     symbol: string,
     interval: string,
     limit: number
@@ -67,21 +71,25 @@ export class PriceService {
 
     const days = mapIntervalToDays(interval);
 
-    const url =
-      `https://api.coingecko.com/api/v3/coins/${id}/ohlc` +
-      `?vs_currency=usd&days=${days}`;
+    const url = `https://api.coingecko.com/api/v3/coins/${id}/ohlc`;
 
-    const res = await fetch(url, {
-      headers: { Accept: "application/json" },
+    const res = await axios.get(url, {
+      params: {
+        vs_currency: "usd",
+        days,
+      },
+      timeout: 10_000,
+      headers: {
+        "User-Agent":
+          "SyncTrade/1.0 (contact: dev@synctrade.app)",
+        Accept: "application/json",
+      },
     });
 
-    if (!res.ok) {
-      throw new Error(`CoinGecko ${res.status}`);
-    }
+    const data = res.data;
 
-    const data = await res.json();
     if (!Array.isArray(data) || data.length === 0) {
-      throw new Error("Empty CoinGecko data");
+      throw new Error("Empty CoinGecko response");
     }
 
     return data.slice(-limit).map((c: any[]) => ({
@@ -93,5 +101,6 @@ export class PriceService {
     }));
   }
 }
+
 
 export const priceService = new PriceService();
