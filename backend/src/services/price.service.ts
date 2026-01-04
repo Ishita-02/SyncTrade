@@ -17,88 +17,75 @@ const COINGECKO_MAP: Record<string, string> = {
   WBTCUSDT: "wrapped-bitcoin",
 };
 
-// Interval → valid CoinGecko days
-function mapIntervalToDays(interval: string): number {
-  switch (interval) {
-    case "1m":
-    case "5m":
-    case "15m":
-    case "1h":
-      return 1;
-    case "4h":
-      return 7;
-    case "1d":
-      return 365;
-    default:
-      return 30;
-  }
-}
-
-// In-memory cache
 const CACHE = new Map<string, { ts: number; data: Candle[] }>();
-const CACHE_TTL = 60_000; 
+const CACHE_TTL = 5 * 60 * 1000; 
 
 export class PriceService {
   async getCandles(
     symbol: string,
-    interval: string,
+    _interval: string,
     limit: number
   ): Promise<Candle[]> {
-    const key = `${symbol}-${interval}-${limit}`;
-    const cached = CACHE.get(key);
-
+    const cached = CACHE.get(symbol);
     if (cached && Date.now() - cached.ts < CACHE_TTL) {
-      return cached.data;
+      return cached.data.slice(-limit);
     }
 
     try {
-      const data = await this.fetchFromCoinGecko(symbol, interval, limit);
-      CACHE.set(key, { ts: Date.now(), data });
-      return data;
+      const data = await this.fetchFromCoinGecko(symbol);
+      CACHE.set(symbol, { ts: Date.now(), data });
+      return data.slice(-limit);
     } catch (err) {
-      console.error("❌ CoinGecko failed in prod:", err);
-      return []; 
+      console.error("❌ CoinGecko failed:", err);
+      return cached?.data.slice(-limit) ?? [];
     }
   }
 
-  private async fetchFromCoinGecko(
-    symbol: string,
-    interval: string,
-    limit: number
-  ): Promise<Candle[]> {
+  private async fetchFromCoinGecko(symbol: string): Promise<Candle[]> {
     const id = COINGECKO_MAP[symbol];
-    if (!id) throw new Error(`Unsupported symbol ${symbol}`);
+    if (!id) throw new Error("Unsupported symbol");
 
-    const days = mapIntervalToDays(interval);
+    const res = await axios.get(
+      `https://api.coingecko.com/api/v3/coins/${id}/market_chart`,
+      {
+        params: {
+          vs_currency: "usd",
+          days: 365,
+        },
+        timeout: 10_000,
+        headers: {
+          "User-Agent": "SyncTrade/1.0",
+          Accept: "application/json",
+        },
+      }
+    );
 
-    const url = `https://api.coingecko.com/api/v3/coins/${id}/ohlc`;
-
-    const res = await axios.get(url, {
-      params: {
-        vs_currency: "usd",
-        days,
-      },
-      timeout: 10_000,
-      headers: {
-        "User-Agent":
-          "SyncTrade/1.0 (contact: dev@synctrade.app)",
-        Accept: "application/json",
-      },
-    });
-
-    const data = res.data;
-
-    if (!Array.isArray(data) || data.length === 0) {
-      throw new Error("Empty CoinGecko response");
+    const prices = res.data.prices;
+    if (!Array.isArray(prices) || prices.length === 0) {
+      throw new Error("Empty market chart");
     }
 
-    return data.slice(-limit).map((c: any[]) => ({
-      time: Math.floor(c[0] / 1000),
-      open: c[1],
-      high: c[2],
-      low: c[3],
-      close: c[4],
-    }));
+    const candles: Candle[] = [];
+
+    for (let i = 1; i < prices.length; i++) {
+      const [time, price] = prices[i];
+      const prevPrice = prices[i - 1][1];
+
+      const open = prevPrice;
+      const close = price;
+      const high = Math.max(open, close);
+      const low = Math.min(open, close);
+
+      candles.push({
+        time: Math.floor(time / 1000),
+        open,
+        high,
+        low,
+        close,
+      });
+    }
+
+    return candles;
   }
 }
 
