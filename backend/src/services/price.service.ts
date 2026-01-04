@@ -1,15 +1,12 @@
-
 type Candle = {
-  time: number;   // unix seconds
+  time: number;
   open: number;
   high: number;
   low: number;
   close: number;
 };
 
-const BINANCE_FAPI_BASE = "https://fapi.binance.com/fapi/v1/klines";
-
-const COINCAP_ASSET_MAP: Record<string, string> = {
+const COINGECKO_MAP: Record<string, string> = {
   BTCUSDT: "bitcoin",
   ETHUSDT: "ethereum",
   ARBUSDT: "arbitrum",
@@ -18,15 +15,24 @@ const COINCAP_ASSET_MAP: Record<string, string> = {
   WBTCUSDT: "wrapped-bitcoin",
 };
 
-// Supported interval mapping
-const INTERVAL_MAP: Record<string, string> = {
-  "1m": "1m",
-  "5m": "5m",
-  "15m": "15m",
-  "1h": "1h",
-  "4h": "4h",
-  "1d": "1d",
-};
+function mapIntervalToDays(interval: string): number {
+  switch (interval) {
+    case "1m":
+    case "5m":
+    case "15m":
+    case "1h":
+      return 1;
+    case "4h":
+      return 7;
+    case "1d":
+      return 365;
+    default:
+      return 30;
+  }
+}
+
+const CACHE = new Map<string, { ts: number; data: Candle[] }>();
+const CACHE_TTL = 60_000; 
 
 export class PriceService {
   async getCandles(
@@ -34,129 +40,58 @@ export class PriceService {
     interval: string,
     limit: number
   ): Promise<Candle[]> {
+    const cacheKey = `${symbol}-${interval}-${limit}`;
+    const cached = CACHE.get(cacheKey);
+
+    if (cached && Date.now() - cached.ts < CACHE_TTL) {
+      return cached.data;
+    }
+
     try {
-      return await this.getBinanceCandles(symbol, interval, limit);
-    } catch (binanceError) {
-      console.error("❌ Binance failed:", binanceError);
-      console.log("↪️ Falling back to CoinCap");
-      return await this.getCoinCapCandles(symbol, interval, limit);
+      const data = await this.getCoinGeckoCandles(symbol, interval, limit);
+      CACHE.set(cacheKey, { ts: Date.now(), data });
+      return data;
+    } catch (err) {
+      console.error("❌ CoinGecko failed:", err);
+      return [];
     }
   }
 
-  // ============================================================
-  // BINANCE (USD-M FUTURES — SERVER SAFE)
-  // ============================================================
-  private async getBinanceCandles(
+  private async getCoinGeckoCandles(
     symbol: string,
     interval: string,
     limit: number
   ): Promise<Candle[]> {
-    const mappedInterval = INTERVAL_MAP[interval];
-    if (!mappedInterval) {
-      throw new Error(`Unsupported interval: ${interval}`);
-    }
+    const id = COINGECKO_MAP[symbol];
+    if (!id) throw new Error(`Unsupported symbol ${symbol}`);
+
+    const days = mapIntervalToDays(interval);
 
     const url =
-      `${BINANCE_FAPI_BASE}` +
-      `?symbol=${symbol}` +
-      `&interval=${mappedInterval}` +
-      `&limit=${limit}`;
+      `https://api.coingecko.com/api/v3/coins/${id}/ohlc` +
+      `?vs_currency=usd&days=${days}`;
 
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 10_000);
+    const res = await fetch(url, {
+      headers: { Accept: "application/json" },
+    });
 
-    try {
-      const res = await fetch(url, {
-        signal: controller.signal,
-        headers: {
-          Accept: "application/json",
-        },
-      });
-
-      if (!res.ok) {
-        const text = await res.text();
-        throw new Error(`Binance ${res.status}: ${text}`);
-      }
-
-      const data = (await res.json()) as any[];
-
-      return data.map((candle) => ({
-        time: Math.floor(candle[0] / 1000),
-        open: Number(candle[1]),
-        high: Number(candle[2]),
-        low: Number(candle[3]),
-        close: Number(candle[4]),
-      }));
-    } finally {
-      clearTimeout(timeout);
-    }
-  }
-
-  // ============================================================
-  // COINCAP FALLBACK (HISTORICAL PRICE → SYNTHETIC OHLC)
-  // ============================================================
-  private async getCoinCapCandles(
-    symbol: string,
-    interval: string,
-    limit: number
-  ): Promise<Candle[]> {
-    const assetId = COINCAP_ASSET_MAP[symbol];
-    if (!assetId) {
-      throw new Error(`CoinCap asset not mapped for ${symbol}`);
+    if (!res.ok) {
+      throw new Error(`CoinGecko ${res.status}`);
     }
 
-    // CoinCap only supports daily/hourly history
-    const coincapInterval =
-      interval === "1d" || interval === "4h" ? "d1" : "h1";
-
-    const url =
-      `https://api.coincap.io/v2/assets/${assetId}/history` +
-      `?interval=${coincapInterval}`;
-
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 10_000);
-
-    try {
-      const res = await fetch(url, {
-        signal: controller.signal,
-        headers: {
-          Accept: "application/json",
-        },
-      });
-
-      if (!res.ok) {
-        const text = await res.text();
-        throw new Error(`CoinCap ${res.status}: ${text}`);
-      }
-
-      const json = await res.json();
-      const points = json.data.slice(-limit);
-
-      return points.map((point: any) => {
-        const price = Number(point.priceUsd);
-
-        // Controlled OHLC synthesis (±1.5%)
-        const variation = price * 0.015;
-
-        const open = price + (Math.random() - 0.5) * variation;
-        const close = price;
-        const high = Math.max(open, close) + Math.random() * variation;
-        const low = Math.min(open, close) - Math.random() * variation;
-
-        return {
-          time: Math.floor(new Date(point.time).getTime() / 1000),
-          open,
-          high,
-          low,
-          close,
-        };
-      });
-    } finally {
-      clearTimeout(timeout);
+    const data = await res.json();
+    if (!Array.isArray(data) || data.length === 0) {
+      throw new Error("Empty CoinGecko data");
     }
+
+    return data.slice(-limit).map((c: any[]) => ({
+      time: Math.floor(c[0] / 1000),
+      open: c[1],
+      high: c[2],
+      low: c[3],
+      close: c[4],
+    }));
   }
 }
-
-
 
 export const priceService = new PriceService();
