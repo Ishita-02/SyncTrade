@@ -20,15 +20,20 @@ export default function LandingPage() {
           </div>
           
           <div className="flex items-center gap-6">
-            <Link href="/strategies" className="text-sm font-medium text-[#8b949e] hover:text-white transition-colors">
+            <button onClick={() => {
+                window.location.href = "/strategies";
+              }} 
+              className="text-sm font-medium text-[#8b949e] hover:text-white transition-colors">
               Leaderboard
-            </Link>
-            <Link 
-              href="/trade" 
+            </button>
+            <button
+              onClick={() => {
+                window.location.href = "/trade";
+              }}
               className="px-5 py-2.5 bg-[#238636] hover:bg-[#2ea043] text-white rounded-lg font-semibold text-sm transition-all flex items-center gap-2 shadow-[0_0_15px_rgba(35,134,54,0.4)]"
             >
-              Launch App <ArrowRight size={16} />
-            </Link>
+              Launch App
+            </button>
           </div>
         </div>
       </header>
@@ -61,12 +66,14 @@ export default function LandingPage() {
             </p>
             
             <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
-              <Link 
-                href="/trade" 
+              <button 
+                onClick = {() => {
+                window.location.href = "/trade";
+              }}
                 className="w-full sm:w-auto px-8 py-4 bg-[#e6edf3] text-[#0d1117] hover:bg-white rounded-lg font-bold text-lg transition-all shadow-lg shadow-white/5"
               >
                 Start Trading Now
-              </Link>
+              </button>
               {/* <Link 
                 href="/strategies" 
                 className="w-full sm:w-auto px-8 py-4 bg-[#161b22] border border-[#30363d] text-[#e6edf3] hover:border-[#8b949e] rounded-lg font-bold text-lg transition-all flex items-center justify-center gap-2"
