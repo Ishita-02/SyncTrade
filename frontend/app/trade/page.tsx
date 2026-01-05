@@ -4,10 +4,18 @@ import { useState } from "react";
 import Link from "next/link";
 import { useAccount } from "wagmi";
 import { useMode } from "../context/ModeContext"; 
+import dynamic from "next/dynamic";
 
-import CandlestickChart from "../components/CandleStickChart";
-import ExecuteTradeBox from "../components/ExecuteTradeBox";
 import { ShieldCheck, LineChart } from "lucide-react"; 
+const CandlestickChart = dynamic(
+  () => import("../components/CandleStickChart"),
+  { ssr: false }
+);
+
+const ExecuteTradeBox = dynamic(
+  () => import("../components/ExecuteTradeBox"),
+  { ssr: false }
+);
 
 export default function TradePage() {
   const [activeMarket, setActiveMarket] = useState("ETH-USD");
