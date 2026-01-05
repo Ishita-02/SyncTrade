@@ -2,14 +2,13 @@
 
 import { useAccount } from "wagmi";
 import { useQuery } from "@tanstack/react-query";
-import { api } from "@/lib/api"; // Check your relative path
+import { api } from "@/lib/api"; 
 import { Wallet, TrendingUp, DollarSign, Activity, ExternalLink, ArrowRight, AlertCircle } from "lucide-react";
 import Link from "next/link";
 import { ConnectButton } from "@rainbow-me/rainbowkit";
 import { useMode } from "@/app/context/ModeContext"; 
 import { usePrices } from "../hooks/usePrices";
 
-// --- TYPES ---
 type Position = {
   id: number;
   leaderId: number;
@@ -31,11 +30,13 @@ type LeaderDetail = {
   meta: string;
 };
 
-// Update these with the addresses from your deployment log
 const TOKEN_MAP: Record<string, string> = {
   [process.env.NEXT_PUBLIC_WETH?.toLowerCase() || ""]: "ETH",
   [process.env.NEXT_PUBLIC_WBTC?.toLowerCase() || ""]: "BTC",
   [process.env.NEXT_PUBLIC_USDC?.toLowerCase() || ""]: "USDC",
+  [process.env.NEXT_PUBLIC_LINK?.toLowerCase() || ""]: "LINK",
+  [process.env.NEXT_PUBLIC_ARB?.toLowerCase() || ""]: "ARB",
+  [process.env.NEXT_PUBLIC_UNI?.toLowerCase() || ""]: "UNI",
   "0xe7f1725e7734ce288f8367e1bb143e90bb3f0512": "ETH", 
 };
 
@@ -76,45 +77,35 @@ export default function PortfolioPage() {
   const { address, isConnected } = useAccount();
   const { prices } = usePrices();
   
-  // 1. Consume Global Context
   const { viewMode, activeStrategyId } = useMode();
 
-  // 2. Fetch Details of Selected Strategy/Leader
   const { data: selectedDetails } = useQuery({
     queryKey: ["leader-details", activeStrategyId],
     queryFn: () => api<LeaderDetail>(`/leaders/${activeStrategyId}`),
     enabled: activeStrategyId !== null,
   });
 
-  // --- NEW: OWNERSHIP CHECK ---
-  // We check if the connected wallet owns the strategy currently being viewed.
   const isStrategyOwner = 
     isConnected && 
     selectedDetails?.address && 
     address && 
     selectedDetails.address.toLowerCase() === address.toLowerCase();
 
-  // 3. Fetch Leader Positions
-  // We only fetch if it's leader mode. (We can technically fetch it, but we won't show it if !isOwner)
   const { data: leaderPositions, isLoading: leaderLoading } = useQuery({
     queryKey: ["leader-positions", activeStrategyId],
     queryFn: () => api<Position[]>(`/leaders/${activeStrategyId}/positions`),
     enabled: !!address && viewMode === "leader" && activeStrategyId !== null,
   });
 
-  // 4. Fetch Follower Positions
   const { data: followerPositions, isLoading: followerLoading } = useQuery({
     queryKey: ["follower-positions", activeStrategyId, address],
     queryFn: () => api<Position[]>(`/leaders/${activeStrategyId}/followers/${address}/positions`),
     enabled: !!address && viewMode === "follower" && activeStrategyId !== null,
   });
 
-  // 5. Determine which list to show
-  // If we are in Leader Mode but NOT the owner, we force an empty list (or handle in UI)
   const positions = (viewMode === "leader" ? leaderPositions : followerPositions) || [];
   const isLoading = viewMode === "leader" ? leaderLoading : followerLoading;
 
-  // ... (Stats Logic remains the same) ...
   const totalVolume = positions.reduce((acc, pos) => acc + Number(pos.sizeUsd), 0);
   const openPositionsCount = positions.filter((p) => p.isOpen).length;
   const closedPositions = positions.filter((p) => !p.isOpen);
@@ -127,25 +118,17 @@ export default function PortfolioPage() {
     { label: "Win Rate", value: winRate, icon: Activity },
   ];
 
-  // ... (Not Connected & No Strategy States remain the same) ...
-  if (!isConnected) return <div /* ... */ >Connect Wallet...</div>;
-  if (activeStrategyId === null) return <div /* ... */ >Select Strategy...</div>;
-  if (isLoading) return <div /* ... */ >Loading...</div>;
-
   return (
     <div style={{ backgroundColor: "#0f1419", minHeight: "100vh", color: "#e6edf3" }}>
       <div style={{ maxWidth: "1400px", margin: "0 auto", padding: "32px 24px" }}>
         
-        {/* Header Section (Same as before) */}
         <div style={{ marginBottom: "32px" }}>
           {/* ... */}
           <h1 style={{ fontSize: "32px", fontWeight: "700", margin: 0 }}>
              {selectedDetails?.meta || `Strategy #${activeStrategyId}`}
           </h1>
-          {/* ... */}
         </div>
 
-        {/* Stats Grid (Same as before) */}
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(250px, 1fr))", gap: "16px", marginBottom: "32px" }}>
           {stats.map((stat, i) => {
             const Icon = stat.icon;
@@ -163,7 +146,6 @@ export default function PortfolioPage() {
           })}
         </div>
 
-        {/* Positions Section */}
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px" }}>
           <h2 style={{ fontSize: "24px", fontWeight: "700", margin: 0 }}>
             {viewMode === "leader" ? "Strategy Positions" : "Your Mirrored Positions"}
@@ -185,38 +167,47 @@ export default function PortfolioPage() {
               </tr>
             </thead>
             <tbody>
-              
-              {/* --- ACCESS CONTROL LOGIC START --- */}
-              {viewMode === "leader" && !isStrategyOwner ? (
-                /* CASE A: User is in Leader Mode but NOT the owner */
+              {!isConnected ? (
+                <tr>
+                  <td colSpan={8} style={{ padding: "48px", textAlign: "center", color: "#8b949e" }}>
+                    Connect your wallet to view portfolio data.
+                  </td>
+                </tr>
+              ) : activeStrategyId === null ? (
+                <tr>
+                  <td colSpan={8} style={{ padding: "48px", textAlign: "center", color: "#8b949e" }}>
+                    Select a strategy from the navbar to view positions.
+                  </td>
+                </tr>
+              ) : isLoading ? (
+                <tr>
+                  <td colSpan={8} style={{ padding: "48px", textAlign: "center", color: "#8b949e" }}>
+                    Loading positions…
+                  </td>
+                </tr>
+              ) : viewMode === "leader" && !isStrategyOwner ? (
                 <tr>
                   <td colSpan={8} style={{ padding: "64px", textAlign: "center" }}>
                     <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "16px" }}>
                       <div style={{ padding: "16px", borderRadius: "50%", backgroundColor: "rgba(235, 87, 87, 0.1)" }}>
-                         <AlertCircle size={32} color="#f85149" />
+                        <AlertCircle size={32} color="#f85149" />
                       </div>
-                      <h3 style={{ fontSize: "18px", fontWeight: "700", margin: 0, color: "#e6edf3" }}>Access Restricted</h3>
-                      <p style={{ color: "#8b949e", maxWidth: "400px", margin: 0, lineHeight: "1.5" }}>
-                        You are viewing <strong>Strategy #{activeStrategyId}</strong> in Leader Mode, but you do not own it. 
-                        To view positions here, you must be the creator of this strategy.
+                      <h3 style={{ fontSize: "18px", fontWeight: "700", margin: 0 }}>Access Restricted</h3>
+                      <p style={{ color: "#8b949e", maxWidth: "400px", margin: 0 }}>
+                        You do not own this strategy.
                       </p>
-                      <Link href="/create-strategy" style={{ marginTop: "16px", padding: "10px 20px", backgroundColor: "#238636", color: "white", borderRadius: "6px", textDecoration: "none", fontWeight: "600", fontSize: "14px" }}>
-                        Create Your Own Strategy
-                      </Link>
                     </div>
                   </td>
                 </tr>
               ) : positions.length === 0 ? (
-                 /* CASE B: Owner (or Follower) has no positions */
-                 <tr>
-                   <td colSpan={8} style={{ padding: "48px", textAlign: "center", color: "#8b949e" }}>
-                     {viewMode === "leader" 
-                       ? "No positions recorded for this strategy." 
-                       : "You haven't mirrored any positions from this leader yet."}
-                   </td>
-                 </tr>
+                <tr>
+                  <td colSpan={8} style={{ padding: "48px", textAlign: "center", color: "#8b949e" }}>
+                    {viewMode === "leader"
+                      ? "No positions recorded for this strategy."
+                      : "You haven't mirrored any positions yet."}
+                  </td>
+                </tr>
               ) : (
-                /* CASE C: Show Positions */
                 positions.map((pos) => {
                   const symbol = TOKEN_MAP[pos.indexToken.toLowerCase()] || "ETH";
                   const entryPrice = Number(pos.entryPrice);
@@ -267,6 +258,7 @@ export default function PortfolioPage() {
                 })
               )}
             </tbody>
+
           </table>
         </div>
       </div>
