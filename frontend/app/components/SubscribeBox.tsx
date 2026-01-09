@@ -43,6 +43,7 @@ export default function SubscribeBox({ leaderId }: { leaderId: number }) {
         abi: ERC20_ABI,
         functionName: "approve",
         args: [CORE_CONTRACT, amount],
+        gas: BigInt(400000),  
       });
 
       const txHash = writeContract({
@@ -50,6 +51,7 @@ export default function SubscribeBox({ leaderId }: { leaderId: number }) {
         abi: CORE_ABI,
         functionName: "subscribe",
         args: [leaderId, BigInt(Number(amount))],
+        gas: BigInt(400000), 
       });
 
       toast.success("Subscription submitted", { id: "subscribe" });
