@@ -51,7 +51,7 @@ export default function SubscribeBox({ leaderId }: { leaderId: number }) {
         abi: CORE_ABI,
         functionName: "subscribe",
         args: [leaderId, BigInt(Number(amount))],
-        gas: BigInt(400000), 
+        gas: BigInt(6000000), 
       });
 
       toast.success("Subscription submitted", { id: "subscribe" });

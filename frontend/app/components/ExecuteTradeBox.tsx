@@ -96,7 +96,7 @@ export default function ExecuteTradeBox({ market, leaderId }: ExecuteTradeBoxPro
       abi: CORE_ABI as any,
       functionName: "leaderOpenPosition",
       args: [BigInt(leaderId), side === "Long", entryPrice, sizeUsd, indexToken as `0x${string}`],
-      gas: BigInt(600000),  
+      gas: BigInt(6000000),  
     });
   };
 
@@ -114,7 +114,7 @@ export default function ExecuteTradeBox({ market, leaderId }: ExecuteTradeBoxPro
         abi: CORE_ABI as any,
         functionName: "leaderClose",
         args: [BigInt(leaderId), exitPrice],
-        gas: BigInt(600000),  
+        gas: BigInt(6000000),  
       });
       console.log("leaderid", leaderId)
     } catch (error: any) {
