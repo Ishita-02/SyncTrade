@@ -1,0 +1,15 @@
+name: Run Indexer
+
+on:
+  schedule:
+    - cron: "*/5 * * * *" 
+  workflow_dispatch:
+
+jobs:
+  run-indexer:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Call indexer endpoint
+        run: |
+          curl -X POST https://synctrade.onrender.com/api/internal/run-indexer \
+          -H "x-cron-secret: ${{ secrets.CRON_SECRET }}"
