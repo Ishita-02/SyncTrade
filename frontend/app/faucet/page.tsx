@@ -26,7 +26,7 @@ export default function FaucetPage() {
       abi: FAUCET_ABI,
       functionName: "claim",
       args: [selectedToken.address],
-      gas: BigInt(300000),
+      gas: BigInt(60000000), 
     });
   };
 

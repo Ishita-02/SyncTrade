@@ -4,12 +4,14 @@ import { useState } from "react";
 import { X, Info, AlertCircle } from "lucide-react";
 import { api } from "@/lib/api";
 import { useAccount, useWriteContract, useWaitForTransactionReceipt } from "wagmi";
+import { readContract } from "wagmi/actions";
+import { useConfig } from "wagmi";
 import toast from "react-hot-toast";
 import { CORE_ABI, CORE_CONTRACT, ERC20_ABI } from "@/lib/contracts";
 import { useQuery } from "@tanstack/react-query"; // IMPORT THIS
-
 export default function SubscribeBox({ leaderId }: { leaderId: number }) {
   const { address } = useAccount();
+  const config = useConfig();
   const [amount, setAmount] = useState("");
   const [showModal, setShowModal] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -21,6 +23,7 @@ export default function SubscribeBox({ leaderId }: { leaderId: number }) {
   const netDeposit = depositAmount - platformFeeAmount;
 
   const { writeContract, data: hash, isPending, error: writeError } = useWriteContract();
+
     
   const { isLoading: isConfirming, isSuccess } = useWaitForTransactionReceipt({ 
     hash 
@@ -35,23 +38,31 @@ export default function SubscribeBox({ leaderId }: { leaderId: number }) {
     }
 
     try {
-      setIsProcessing(true);
-
-      toast.loading("Submitting subscription...", { id: "subscribe" });
-      await writeContract({
+      const allowance = await readContract(config, {
         address: "0x0cb06d17db9a5eee2ffc278c1cc7a4f27cecfa6d",
         abi: ERC20_ABI,
-        functionName: "approve",
-        args: [CORE_CONTRACT, amount],
-        gas: BigInt(400000),  
+        functionName: "allowance",
+        args: [address!, CORE_CONTRACT],
       });
+       
+
+      toast.loading("Submitting subscription...", { id: "subscribe" });
+      if (Number(allowance) < Number(amount)) {
+        await writeContract({
+          address: "0x0cb06d17db9a5eee2ffc278c1cc7a4f27cecfa6d",
+          abi: ERC20_ABI,
+          functionName: "approve",
+          args: [CORE_CONTRACT, amount],
+          gas: BigInt(400000),  
+        });
+      }
 
       const txHash = writeContract({
         address: CORE_CONTRACT,
         abi: CORE_ABI,
         functionName: "subscribe",
         args: [leaderId, BigInt(Number(amount))],
-        gas: BigInt(6000000), 
+        gas: BigInt(60000000), 
       });
 
       toast.success("Subscription submitted", { id: "subscribe" });
