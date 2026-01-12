@@ -4,6 +4,7 @@ import followerRoutes from "./routes/follower.route.js";
 import positionRoutes from "./routes/position.route.js";
 import strategyRoutes from "./routes/strategy.route.js";
 import priceRoutes from "./routes/price.route.js";
+import internalRoutes from "./routes/internal.route.js";
 import { config } from "./config.js";
 import cors from "@fastify/cors";
 
@@ -24,6 +25,7 @@ export const startServer = async () => {
   app.register(positionRoutes, { prefix: "/api" });
   app.register(strategyRoutes, { prefix: "/api" });
   app.register(priceRoutes, { prefix: "/api" });
+  app.register(internalRoutes, { prefix: "/api" });
 
   app.get("/health", async () => ({ ok: true }));
 
