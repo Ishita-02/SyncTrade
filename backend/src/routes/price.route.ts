@@ -95,18 +95,18 @@ export default async function priceRoutes(app: FastifyInstance) {
     return price;
   });
 
-  app.get("/prices/candles", async (req, reply) => {
-    const { symbol = "ETHUSDT", interval = "1d", limit = "200" } =
-      req.query as any;
+  // app.get("/prices/candles", async (req, reply) => {
+  //   const { symbol = "ETHUSDT", interval = "1d", limit = "200" } =
+  //     req.query as any;
 
-    const candles = await priceService.getCandles(
-      symbol,
-      interval,
-      Number(limit)
-    );
+  //   const candles = await priceService.getCandles(
+  //     symbol,
+  //     interval,
+  //     Number(limit)
+  //   );
 
-    reply.send(candles);
-  });
+  //   reply.send(candles);
+  // });
 
 }
 
