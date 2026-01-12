@@ -492,12 +492,19 @@ export const startIndexer = async () => {
           }
         const leaderId = Number(args.leaderId);
         const action = args.action; 
-        const sizeUsd = new Decimal(
-              args.sizeUsd.toString()
-            ).div("1e18");;
+        // const sizeUsd = new Decimal(
+        //       args.sizeUsd.toString()
+        //     ).div("1e18");
         const isLong = Boolean(args.isLong);
         const indexToken = args.indexToken;
-        const price = args.entryPrice;
+        const sizeUsd = new Decimal(
+          new Decimal(args.sizeUsd.toString()).div("1e18").toString()
+        );
+
+        const price = new Decimal(
+          args.entryPrice.toString()
+        );
+
 
         console.log(`🔔 Leader Signal: #${leaderId} - ${action}`);
 
@@ -529,41 +536,63 @@ export const startIndexer = async () => {
           });
 
           if (openPos) {
+            // ---- 1️⃣ Leader PnL calculation (Decimal → number for math) ----
+            const priceNum = Number(price);
+            const entryNum = Number(openPos.entryPrice);
+            const sizeNum = Number(openPos.sizeUsd);
+
+            let leaderPnl = 0;
+
+            if (entryNum > 0) {
+              if (openPos.isLong) {
+                leaderPnl = ((priceNum - entryNum) / entryNum) * sizeNum;
+              } else {
+                leaderPnl = ((entryNum - priceNum) / entryNum) * sizeNum;
+              }
+            }
+
+            // ---- 2️⃣ Update LEADER position (single update, enhanced) ----
             await prisma.position.update({
               where: { id: openPos.id },
               data: {
                 isOpen: false,
-                exitPrice: price
-              } as any
+                exitPrice: price, // Prisma.Decimal
+                pnlUsd: new Decimal(leaderPnl.toString()),
+              },
             });
 
+            console.log(`✅ Leader position closed | PnL: ${leaderPnl}`);
+
+            // ---- 3️⃣ Follower settlement (unchanged, your code is good) ----
             const followerPositions = await prisma.position.findMany({
               where: {
                 leaderId: leaderId,
-                followerId: { not: null }, 
-                isOpen: true
+                followerId: { not: null },
+                isOpen: true,
               },
-              include: { follower: true } 
+              include: { follower: true },
             });
 
             for (const fPos of followerPositions) {
               if (!fPos.follower?.address) continue;
 
-              const entry = Number(fPos.entryPrice);
-              const size = Number(fPos.sizeUsd);
+              const priceNum = Number(price);
+              const entryNum = Number(fPos.entryPrice);
+              const sizeNum = Number(fPos.sizeUsd);
+
               let pnl = 0;
 
-              if (entry > 0) {
+              if (entryNum > 0) {
                 if (fPos.isLong) {
-                  pnl = ((price - entry) / entry) * size;
+                  pnl = ((priceNum - entryNum) / entryNum) * sizeNum;
                 } else {
-                  pnl = ((entry - price) / entry) * size;
+                  pnl = ((entryNum - priceNum) / entryNum) * sizeNum;
                 }
               }
 
               try {
                 console.log(`Settling ${fPos.follower.address} PnL: ${pnl}`);
-                
+
                 const tx = await walletClient.writeContract({
                   address: config.CORE_CONTRACT as `0x${string}`,
                   abi: coreABI,
@@ -571,15 +600,17 @@ export const startIndexer = async () => {
                   args: [
                     BigInt(leaderId),
                     fPos.follower.address as `0x${string}`,
-                    BigInt(Math.floor(pnl * 1e18)) 
-                  ]
+                    BigInt(Math.floor(pnl * 1e18)),
+                  ],
                 });
+
                 console.log(`✅ Settled tx: ${tx}`);
               } catch (err) {
                 console.error(`❌ Failed to settle ${fPos.follower.address}`, err);
               }
             }
-          } else {
+          }
+          else {
             console.warn(`⚠️ Close signal for Leader #${leaderId} but no DB position found.`);
           }
         }
