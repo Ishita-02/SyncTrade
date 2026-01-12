@@ -96,15 +96,32 @@ export default function LeaderPage() {
     }
   };
 
+   const TOKEN_DECIMALS: Record<string, number> = {
+      ETH: 18,
+      BTC: 18,
+      LINK: 18,
+      UNI: 18,
+      ARB: 18,
+      USDC: 6,
+    };
+
+
   const allPositions = (rawPositions || []).map((p) => {
     const tokenKey = p.indexToken.toLowerCase();
     const marketInfo = MARKET_MAP[tokenKey];
 
-    const entryPrice = Number(p.entryPrice) ;
-    const sizeUsd = Number(p.sizeUsd) ;
+    const symbol = MARKET_MAP[p.indexToken.toLowerCase()]?.symbol || "ETH";
+    const decimals = TOKEN_DECIMALS[symbol] ?? 18;
 
-    const symbol = MARKET_MAP[p.indexToken.toLowerCase()];
-    const currentPrice = (prices && symbol?.symbol && (prices as Record<string, any>)[symbol.symbol]?.price) ?? 0;
+    const entryPrice =
+      Number(p.entryPrice) / Math.pow(10, decimals);
+
+    const sizeUsd = Number(p.sizeUsd);
+
+    const currentPrice =
+    (prices && symbol &&
+      (prices as Record<string, any>)[symbol]?.price) ?? 0;
+
 
     let pnlUsd = 0;
     let pnlPercent = 0;

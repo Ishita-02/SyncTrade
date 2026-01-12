@@ -40,6 +40,16 @@ const TOKEN_MAP: Record<string, string> = {
   "0xe7f1725e7734ce288f8367e1bb143e90bb3f0512": "ETH", 
 };
 
+const TOKEN_DECIMALS: Record<string, number> = {
+  ETH: 18,
+  BTC: 18,
+  LINK: 18,
+  UNI: 18,
+  ARB: 18,
+  USDC: 6,
+};
+
+
 function formatToken(address: string) {
   const symbol = TOKEN_MAP[address.toLowerCase()];
   if (symbol) return symbol;
@@ -210,12 +220,16 @@ export default function PortfolioPage() {
               ) : (
                 positions.map((pos) => {
                   const symbol = TOKEN_MAP[pos.indexToken.toLowerCase()] || "ETH";
-                  const entryPrice = Number(pos.entryPrice);
+                  const decimals = TOKEN_DECIMALS[symbol] ?? 18;
+
+                  const entryPrice =
+                    Number(pos.entryPrice) / Math.pow(10, decimals);
+
                   const sizeUsd = Number(pos.sizeUsd);
                   
                   let currentPrice = 0;
                   if (!pos.isOpen && pos.exitPrice) {
-                    currentPrice = Number(pos.exitPrice);
+                    currentPrice = Number(pos.exitPrice) / Math.pow(10, decimals);
                   } else {
                     currentPrice = prices?.[symbol as keyof typeof prices]?.price || 0;
                   }
