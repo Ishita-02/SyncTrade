@@ -219,57 +219,115 @@ export default function PortfolioPage() {
                 </tr>
               ) : (
                 positions.map((pos) => {
-                  const symbol = TOKEN_MAP[pos.indexToken.toLowerCase()] || "ETH";
-                  const decimals = TOKEN_DECIMALS[symbol] ?? 18;
+                const symbol = TOKEN_MAP[pos.indexToken.toLowerCase()] || "ETH";
 
-                  const entryPrice =
-                    Number(pos.entryPrice) / Math.pow(10, decimals);
+                const entryPrice = Number(pos.entryPrice) / 1e18;
 
-                  const sizeUsd = Number(pos.sizeUsd);
-                  
-                  let currentPrice = 0;
-                  if (!pos.isOpen && pos.exitPrice) {
-                    currentPrice = Number(pos.exitPrice) / Math.pow(10, decimals);
-                  } else {
-                    currentPrice = prices?.[symbol as keyof typeof prices]?.price || 0;
-                  }
+                const sizeUsd = parseFloat(pos.sizeUsd);
 
-                  let pnlUsd = 0;
-                  let pnlPercent = 0;
+                let currentPrice = 0;
+                if (!pos.isOpen && pos.exitPrice) {
+                  currentPrice = Number(pos.exitPrice) / 1e18;
+                } else {
+                  currentPrice = prices?.[symbol as keyof typeof prices]?.price || 0;
+                }
 
-                  if (entryPrice > 0 && currentPrice > 0) {
-                    const priceDiff = pos.isLong ? currentPrice - entryPrice : entryPrice - currentPrice;
-                    pnlUsd = (priceDiff / entryPrice) * sizeUsd;
-                    pnlPercent = (priceDiff / entryPrice) * 100;
-                  }
-                  
-                  const isPnlPositive = pnlUsd >= 0;
+                let pnlUsd = 0;
+                let pnlPercent = 0;
 
-                  return (
-                    <tr key={pos.id} style={{ borderBottom: "1px solid #30363d" }}>
-                      {/* ... (Keep your existing Row content here exactly as is) ... */}
-                      <td style={{ padding: "16px 24px", fontWeight: "600" }}>{formatToken(pos.indexToken)}</td>
-                      <td style={{ padding: "16px 24px" }}>
-                         <span style={{ padding: "4px 8px", borderRadius: "4px", fontSize: "12px", fontWeight: "700", backgroundColor: pos.isLong ? "rgba(35, 134, 54, 0.2)" : "rgba(218, 54, 51, 0.2)", color: pos.isLong ? "#3fb950" : "#f85149" }}>
-                           {pos.isLong ? "LONG" : "SHORT"}
-                         </span>
-                      </td>
-                      <td style={{ padding: "16px 24px" }}>{formatUsd(pos.sizeUsd)}</td>
-                      <td style={{ padding: "16px 24px", color: "#8b949e" }}>{Number(pos.entryPrice) > 0 ? formatUsd(pos.entryPrice) : "-"}</td>
-                      <td style={{ padding: "16px 24px", color: "#8b949e" }}>{Number(currentPrice) > 0 ? formatUsd(currentPrice.toString()) : "-"}</td>
-                      <td style={{ padding: "16px 24px" }}>
-                        <div style={{ display: "flex", flexDirection: "column" }}>
-                          <span style={{ color: isPnlPositive ? "#26a641" : "#f85149", fontWeight: 600 }}>{isPnlPositive ? "+" : "-"}${formatPnL(pnlUsd, 'usd')}</span>
-                          <span style={{ fontSize: "11px", color: isPnlPositive ? "#26a641" : "#f85149" }}>{isPnlPositive ? "+" : "-"}{formatPnL(pnlPercent, 'percent')}%</span>
-                        </div>
-                      </td>
-                      <td style={{ padding: "16px 24px" }}><span style={{ color: pos.isOpen ? "#58a6ff" : "#8b949e" }}>{pos.isOpen ? "OPEN" : "CLOSED"}</span></td>
-                      <td style={{ padding: "16px 24px" }}>
-                        <a href={`https://sepolia.arbiscan.io/tx/${pos.txHash}`} target="_blank" rel="noreferrer" style={{ color: "#8b949e", display: "flex", alignItems: "center", gap: "4px", textDecoration: "none" }}>Scan <ExternalLink size={12} /></a>
-                      </td>
-                    </tr>
-                  );
-                })
+                if (entryPrice > 0 && currentPrice > 0) {
+                  const priceDiff = pos.isLong
+                    ? currentPrice - entryPrice
+                    : entryPrice - currentPrice;
+
+                  pnlUsd = (priceDiff / entryPrice) * sizeUsd;
+                  pnlPercent = (priceDiff / entryPrice) * 100;
+                }
+
+                const isPnlPositive = pnlUsd >= 0;
+
+                return (
+                  <tr key={pos.id} style={{ borderBottom: "1px solid #30363d" }}>
+                    <td style={{ padding: "16px 24px", fontWeight: "600" }}>
+                      {formatToken(pos.indexToken)}
+                    </td>
+
+                    <td style={{ padding: "16px 24px" }}>
+                      <span
+                        style={{
+                          padding: "4px 8px",
+                          borderRadius: "4px",
+                          fontSize: "12px",
+                          fontWeight: "700",
+                          backgroundColor: pos.isLong
+                            ? "rgba(35, 134, 54, 0.2)"
+                            : "rgba(218, 54, 51, 0.2)",
+                          color: pos.isLong ? "#3fb950" : "#f85149",
+                        }}
+                      >
+                        {pos.isLong ? "LONG" : "SHORT"}
+                      </span>
+                    </td>
+
+                    <td style={{ padding: "16px 24px" }}>
+                      {formatUsd(pos.sizeUsd)}
+                    </td>
+
+                    <td style={{ padding: "16px 24px", color: "#8b949e" }}>
+                      {entryPrice > 0 ? entryPrice.toLocaleString(undefined, { maximumFractionDigits: 2 }) : "-"}
+                    </td>
+
+                    <td style={{ padding: "16px 24px", color: "#8b949e" }}>
+                      {currentPrice > 0 ? currentPrice.toLocaleString(undefined, { maximumFractionDigits: 2 }) : "-"}
+                    </td>
+
+                    <td style={{ padding: "16px 24px" }}>
+                      <div style={{ display: "flex", flexDirection: "column" }}>
+                        <span
+                          style={{
+                            color: isPnlPositive ? "#26a641" : "#f85149",
+                            fontWeight: 600,
+                          }}
+                        >
+                          {isPnlPositive ? "+" : "-"}${formatPnL(pnlUsd, "usd")}
+                        </span>
+                        <span
+                          style={{
+                            fontSize: "11px",
+                            color: isPnlPositive ? "#26a641" : "#f85149",
+                          }}
+                        >
+                          {isPnlPositive ? "+" : "-"}
+                          {formatPnL(pnlPercent, "percent")}%
+                        </span>
+                      </div>
+                    </td>
+
+                    <td style={{ padding: "16px 24px" }}>
+                      <span style={{ color: pos.isOpen ? "#58a6ff" : "#8b949e" }}>
+                        {pos.isOpen ? "OPEN" : "CLOSED"}
+                      </span>
+                    </td>
+
+                    <td style={{ padding: "16px 24px" }}>
+                      <a
+                        href={`https://sepolia.arbiscan.io/tx/${pos.txHash}`}
+                        target="_blank"
+                        rel="noreferrer"
+                        style={{
+                          color: "#8b949e",
+                          display: "flex",
+                          alignItems: "center",
+                          gap: "4px",
+                          textDecoration: "none",
+                        }}
+                      >
+                        Scan <ExternalLink size={12} />
+                      </a>
+                    </td>
+                  </tr>
+                );
+              })
               )}
             </tbody>
 
