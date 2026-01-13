@@ -223,7 +223,7 @@ export default function PortfolioPage() {
 
                 const entryPrice = Number(pos.entryPrice) / 1e18;
 
-                const sizeUsd = parseFloat(pos.sizeUsd);
+                const sizeUsd = Number(pos.sizeUsd) / 1e18;
 
                 let currentPrice = 0;
                 if (!pos.isOpen && pos.exitPrice) {
